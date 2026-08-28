@@ -1,0 +1,42 @@
+buildscript {
+    ext.kotlin_version = "2.0.21"
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.google.gms:google-services:4.4.1'
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(':app')
+    
+    // Use a more robust way to set namespace if missing
+    project.plugins.whenPluginAdded { plugin ->
+        if (plugin.class.name.startsWith('com.android.build.gradle.LibraryPlugin') ||
+            plugin.class.name.startsWith('com.android.build.gradle.AppPlugin')) {
+            project.android {
+                if (namespace == null) {
+                    namespace = "com.inspectoshield.partner.${project.name.replace('-', '.')}"
+                }
+            }
+        }
+    }
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}

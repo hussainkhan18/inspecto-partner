@@ -59,8 +59,6 @@ class EquipmentService {
     return response.statusCode == 200;
   }
 
-  // ── SAVE CHECKLIST ─────────────────────────────────────────
-
   static Future<Map<String, dynamic>> saveCheckList({
     required Map<String, dynamic> equipmentData,
     required File imageFile,
@@ -89,7 +87,6 @@ class EquipmentService {
       );
     }
 
-    // Fields — bilkul same jo new_inspection.dart mein the
     request.fields['equipment_id'] = equipmentData["equipment_id"].toString();
     request.fields['report_id'] = reportId;
     request.fields['checklist_id'] =
@@ -118,9 +115,21 @@ class EquipmentService {
 
     var response = await request.send();
     var responseString = await response.stream.bytesToString();
+
+    dynamic decodedBody;
+    try {
+      decodedBody = jsonDecode(responseString);
+      print(decodedBody);
+    } catch (e) {
+      decodedBody = {
+        "success": false,
+        "message": "Server error / Invalid Response"
+      };
+    }
+
     return {
       'statusCode': response.statusCode,
-      'body': jsonDecode(responseString),
+      'body': decodedBody,
     };
   }
 }

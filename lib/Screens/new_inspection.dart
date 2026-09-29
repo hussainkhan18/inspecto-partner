@@ -46,9 +46,19 @@ class _NewInspectionState extends State<NewInspection> {
   File? _certificate;
   bool isShow = false;
   bool _isLoading = true;
+
   TextEditingController issueDate = TextEditingController();
   TextEditingController expiryDate = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
+
+  final ImagePicker _picker = ImagePicker();
+  Map<String, dynamic>? _equipmentData;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchEquipmentData();
+  }
 
   @override
   void dispose() {
@@ -56,6 +66,46 @@ class _NewInspectionState extends State<NewInspection> {
     expiryDate.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  Future<void> pickImageFromCamera() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 50,
+        maxWidth: 800,
+        maxHeight: 800,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _image = File(pickedFile.path);
+          isVisible = true;
+        });
+      }
+    } catch (e) {
+      print("Camera picking error: $e");
+    }
+  }
+
+  Future<void> pickCertificate() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 50,
+        maxHeight: 800,
+        maxWidth: 800,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _certificate = File(pickedFile.path);
+          isShow = true;
+        });
+      }
+    } catch (e) {
+      print("Certificate picker error: $e");
+    }
   }
 
   Future<void> _selectIssueDate(BuildContext context) async {
@@ -82,133 +132,42 @@ class _NewInspectionState extends State<NewInspection> {
     }
   }
 
-  Future<void> pickImage(ImageSource source) async {
-    final pickedFile = await ImagePicker().pickImage(
-        source: source, imageQuality: 20, maxHeight: 500, maxWidth: 500);
-
-    if (pickedFile != null) {
-      setState(() {
-        _image = File(pickedFile.path);
-        isVisible = true;
-      });
-      print("_image size check $_image");
-    }
-  }
-
-  Future pickCertificate() async {
-    final pickedFile = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 30,
-        maxHeight: 200,
-        maxWidth: 200);
-
-    if (pickedFile != null) {
-      setState(() {
-        _certificate = File(pickedFile.path);
-        isShow = true;
-      });
-      Navigator.of(context).pop();
-      _showImageDialog();
-    }
-  }
-
-  void showPickerDialog() {
-    Alert(
-      context: context,
-      title: AppLocalizations.of(context)!.translate("Select Image Source"),
-      content: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              pickImage(ImageSource.camera);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xff0DC5B9),
-              elevation: 10,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8.0),
-              ),
-            ),
-            child: SizedBox(
-              height: MediaQuery.of(context).size.height * .05,
-              child: Center(
-                child: Text(
-                  AppLocalizations.of(context)!.translate("Camera"),
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              pickImage(ImageSource.gallery);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xff0DC5B9),
-              elevation: 10,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8.0),
-              ),
-            ),
-            child: SizedBox(
-              height: MediaQuery.of(context).size.height * .05,
-              child: Center(
-                child: Text(
-                  AppLocalizations.of(context)!.translate("Gallery"),
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-      buttons: [
-        DialogButton(
-          onPressed: () => Navigator.pop(context),
-          color: Colors.red,
-          child: const Text(
-            "Cancel",
-            style: TextStyle(color: Colors.white, fontSize: 18),
-          ),
-        ),
-      ],
-    ).show();
-  }
-
   void _showImageDialog() {
     Alert(
       context: context,
       title: AppLocalizations.of(context)!.translate("Add Certificate"),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          ArgonButton(
-            width: MediaQuery.of(context).size.width,
-            height: 50,
-            borderRadius: 8.0,
-            elevation: 10,
-            color: const Color(0xff0DC5B9),
-            child: Text(
-              AppLocalizations.of(context)!.translate("Add Picture"),
-              style: const TextStyle(color: Colors.white),
-            ),
-            onTap: (startLoading, stopLoading, btnState) async {
-              pickCertificate();
-            },
-          ),
-          const SizedBox(height: 10),
-          _certificate != null
-              ? Image.file(_certificate!, height: 60)
-              : Text(AppLocalizations.of(context)!
-                  .translate('No image selected.')),
-          const SizedBox(height: 10),
-          _buildDateField("Issue Date: ", issueDate, _selectIssueDate),
-          const SizedBox(height: 10),
-          _buildDateField("Expiry Date: ", expiryDate, _selectExpiryDate),
-        ],
+      content: StatefulBuilder(
+        builder: (BuildContext context, StateSetter setDialogState) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ArgonButton(
+                width: MediaQuery.of(context).size.width,
+                height: 45,
+                borderRadius: 8.0,
+                elevation: 4,
+                color: const Color(0xff0DC5B9),
+                child: Text(
+                  AppLocalizations.of(context)!.translate("Add Picture"),
+                  style: const TextStyle(color: Colors.white),
+                ),
+                onTap: (startLoading, stopLoading, btnState) async {
+                  await pickCertificate();
+                  setDialogState(() {});
+                },
+              ),
+              const SizedBox(height: 10),
+              _certificate != null
+                  ? Image.file(_certificate!, height: 60)
+                  : Text(AppLocalizations.of(context)!
+                      .translate('No image selected.')),
+              const SizedBox(height: 10),
+              _buildDateField("Issue Date: ", issueDate, _selectIssueDate),
+              const SizedBox(height: 10),
+              _buildDateField("Expiry Date: ", expiryDate, _selectExpiryDate),
+            ],
+          );
+        },
       ),
       buttons: [
         DialogButton(
@@ -233,7 +192,7 @@ class _NewInspectionState extends State<NewInspection> {
           color: Colors.black,
           child: const Text(
             "Submit",
-            style: TextStyle(color: Colors.white, fontSize: 18),
+            style: TextStyle(color: Colors.white, fontSize: 16),
           ),
         ),
       ],
@@ -248,7 +207,7 @@ class _NewInspectionState extends State<NewInspection> {
         Text(AppLocalizations.of(context)!.translate(label)),
         Container(
           height: 40,
-          width: 100,
+          width: 110,
           color: Colors.white,
           child: TextField(
             textAlign: TextAlign.center,
@@ -259,7 +218,10 @@ class _NewInspectionState extends State<NewInspection> {
                   AppLocalizations.of(context)!.translate("Select a date"),
               border: InputBorder.none,
             ),
-            onTap: () => onTap(context),
+            onTap: () async {
+              await onTap(context);
+              setState(() {});
+            },
           ),
         ),
       ],
@@ -292,7 +254,7 @@ class _NewInspectionState extends State<NewInspection> {
                 .translate("Certificate detail could not be added"))));
       }
     } catch (e) {
-      print('Error posting data: $e');
+      print('Error posting certificate data: $e');
     }
   }
 
@@ -300,35 +262,31 @@ class _NewInspectionState extends State<NewInspection> {
     return await EquipmentService.fetchEquipmentData(reportId);
   }
 
-  Map<String, dynamic>? _equipmentData;
-
   Future<void> _fetchEquipmentData() async {
     try {
       final data =
           await fetchEquipmentData(widget.data["report_id"].toString());
-      print("locationId ${widget.data["report_id"]}");
+      if (!mounted) return;
       setState(() {
         _equipmentData = data;
         _isLoading = false;
 
-        // ── UPDATED: ab tags object array hai, string array nahi ──
         if (_equipmentData != null && _equipmentData!['tags'] != null) {
           final rawTags = _equipmentData!['tags'];
 
           WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
             final provider =
                 Provider.of<ChecklistProvider>(context, listen: false);
 
-            // Naya format: list of objects with name, type, options
             if (rawTags is List && rawTags.isNotEmpty && rawTags.first is Map) {
               provider.addItemsFromApi(rawTags);
             }
-            // Old format fallback (agar kabhi simple string list mile):
-            // else if (rawTags is List) { ... }
           });
         }
       });
     } catch (error) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
@@ -337,23 +295,28 @@ class _NewInspectionState extends State<NewInspection> {
   }
 
   Future<void> saveCheckList() async {
+    FocusScope.of(context).unfocus();
+
     try {
-      var equipmentData =
+      final equipmentData = _equipmentData ??
           await fetchEquipmentData(widget.data["report_id"].toString());
+
       if (!mounted) return;
       if (equipmentData == null) {
-        print("Equipment data is null");
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Unable to load equipment details")));
         return;
       }
-      if (!mounted) return;
+
       if (_image == null) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Upload equipment Image First")));
         return;
       }
-      if (!mounted) return;
-      var checklistProvider =
+
+      final checklistProvider =
           Provider.of<ChecklistProvider>(context, listen: false);
+
       if (!checklistProvider.areAllTagsSelected()) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(AppLocalizations.of(context)!
@@ -373,15 +336,16 @@ class _NewInspectionState extends State<NewInspection> {
         checklistItems: Map<String, String>.from(checklistProvider.items),
         notes: _notesController.text,
       );
-
+print("POST RESPONSE BODY: ${result['body']}");
       if (!mounted) return;
+
       if (result['statusCode'] == 200) {
         showSuccessAnimation(context);
-      } else if (result['body']["success"] == false) {
+      } else {
+        final msg = result['body']?["message"] ?? "Failed to save checklist";
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(result['body'].toString())));
+            .showSnackBar(SnackBar(content: Text(msg.toString())));
       }
-      print("Time Right Now: ${DateTime.now()}");
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -440,15 +404,6 @@ class _NewInspectionState extends State<NewInspection> {
   }
 
   @override
-  void initState() {
-    print("QR code id ${widget.data["id"]}");
-    print("QR code id ${widget.data}");
-    _fetchEquipmentData();
-    print(widget.data);
-    super.initState();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xffF5F6FA),
@@ -476,7 +431,7 @@ class _NewInspectionState extends State<NewInspection> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── TOP HEADER CARD ─────────────────────────────
+                    // Header Image
                     Container(
                       width: double.infinity,
                       margin: const EdgeInsets.all(16),
@@ -514,7 +469,8 @@ class _NewInspectionState extends State<NewInspection> {
                           ),
                           Visibility(
                             visible: _equipmentData != null &&
-                                (_equipmentData!['certificate_permission'] == 'yes' ||
+                                (_equipmentData!['certificate_permission'] ==
+                                        'yes' ||
                                     _equipmentData!['certificate_permission'] ==
                                         'YES' ||
                                     _equipmentData!['certificate_permission'] ==
@@ -547,7 +503,6 @@ class _NewInspectionState extends State<NewInspection> {
                                     ],
                                   ),
                                   onTap: (startLoading, stopLoading, btnState) {
-                                    print("saad qr data: ${widget.data}");
                                     _showImageDialog();
                                   },
                                 ),
@@ -558,10 +513,9 @@ class _NewInspectionState extends State<NewInspection> {
                       ),
                     ),
 
-                    // ── EQUIPMENT INFO CARD ──────────────────────────
                     _buildInfoCard(context),
 
-                    // ── NOTES CARD ───────────────────────────────────
+                    // Notes Section
                     Container(
                       margin: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 6),
@@ -628,7 +582,7 @@ class _NewInspectionState extends State<NewInspection> {
                               controller: _notesController,
                               maxLines: 3,
                               minLines: 2,
-                              textInputAction: TextInputAction.newline,
+                              textInputAction: TextInputAction.done,
                               decoration: InputDecoration(
                                 hintText: AppLocalizations.of(context)!
                                     .translate(
@@ -663,7 +617,6 @@ class _NewInspectionState extends State<NewInspection> {
                       ),
                     ),
 
-                    // ── CHECKLIST CARD ───────────────────────────────
                     Container(
                       margin: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 6),
@@ -707,8 +660,6 @@ class _NewInspectionState extends State<NewInspection> {
                             ),
                           ),
                           const Divider(height: 1, indent: 16, endIndent: 16),
-
-                          // ── DYNAMIC CHECKLIST ITEMS ──────────────
                           Consumer<ChecklistProvider>(
                             builder: (context, provider, child) {
                               final tagList = provider.tags;
@@ -753,7 +704,6 @@ class _NewInspectionState extends State<NewInspection> {
                       ),
                     ),
 
-                    // ── UPLOAD IMAGE SECTION ─────────────────────────
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                       child: ArgonButton(
@@ -779,13 +729,11 @@ class _NewInspectionState extends State<NewInspection> {
                           ],
                         ),
                         onTap: (startLoading, stopLoading, btnState) {
-                          print(_image);
-                          pickImage(ImageSource.camera);
+                          pickImageFromCamera();
                         },
                       ),
                     ),
 
-                    // Uploaded image preview
                     Visibility(
                       visible: isVisible,
                       child: Container(
@@ -811,7 +759,6 @@ class _NewInspectionState extends State<NewInspection> {
                       ),
                     ),
 
-                    // ── SAVE BUTTON ──────────────────────────────────
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                       child: ArgonButton(
@@ -852,7 +799,6 @@ class _NewInspectionState extends State<NewInspection> {
     );
   }
 
-  // ── EQUIPMENT INFO CARD ────────────────────────────────────────────────────
   Widget _buildInfoCard(BuildContext context) {
     final fields = [
       {"label": "EQUIPMENT NAME: ", "value": _equipmentData?["equipment_name"]},
@@ -927,12 +873,10 @@ class _NewInspectionState extends State<NewInspection> {
     );
   }
 
-  // ── TYPE: OPTIONS — Dynamic chips from API ─────────────────────────────────
   Widget _buildOptionsTagItem(TagItem tag, ChecklistProvider provider) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Tag name
         Text(
           tag.name,
           style: const TextStyle(
@@ -942,13 +886,11 @@ class _NewInspectionState extends State<NewInspection> {
           ),
         ),
         const SizedBox(height: 10),
-        // Dynamic options — wrap handles overflow jab zyada options hon
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: tag.options.map((option) {
             final isSelected = tag.selectedValue == option;
-            // Har option ka color consistent rakho — selected teal, unselected grey
             const selectedColor = Color(0xff0DC5B9);
             return GestureDetector(
               onTap: () => provider.changeValue(tag.name, option),
@@ -999,12 +941,10 @@ class _NewInspectionState extends State<NewInspection> {
     );
   }
 
-  // ── TYPE: INPUT — Text field ───────────────────────────────────────────────
   Widget _buildInputTagItem(TagItem tag, ChecklistProvider provider) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Tag name
         Text(
           tag.name,
           style: const TextStyle(

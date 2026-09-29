@@ -1,6 +1,6 @@
 class ApiConstants {
   static const String baseUrl =
-      'https://inspecto-partner.stageserverofbss.com/api';
+      'https://partner.inspectoshield.com/api';
 
   // Authentication & User
   static const String login = '$baseUrl/login';

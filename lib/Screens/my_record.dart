@@ -311,18 +311,58 @@ class _MyRecordsState extends State<MyRecords>
               );
   }
 
-  // ── RECORD CARD ──────────────────────────────────────────
+ // ── RECORD CARD ──────────────────────────────────────────
   Widget _buildRecordCard(int index) {
-    String datetimeStr = recordList[index][1].toString();
-    DateTime datetime = DateTime.parse(
-            datetimeStr.contains('Z') ? datetimeStr : '${datetimeStr}Z')
-        .toLocal();
+    final record = recordList[index];
+
+    // Safely parse Date & Time
+    String datetimeStr = record is Map
+        ? (record["updated_at"] ?? record["created_at"] ?? '')
+        : record[1]?.toString() ?? '';
+
+    DateTime datetime;
+    try {
+      datetime = DateTime.parse(
+              datetimeStr.contains('Z') ? datetimeStr : '${datetimeStr}Z')
+          .toLocal();
+    } catch (_) {
+      datetime = DateTime.now();
+    }
+
     String formattedDate = DateFormat('dd MMM yy').format(datetime);
     String formattedTime = DateFormat('hh:mm a').format(datetime);
 
-    String equipmentText = recordList[index][0].toString();
-    String locationText = recordList[index][2].toString();
-    String areaText = recordList[index][4].toString();
+    // Extract values dynamically
+    String equipmentText = (record is Map
+            ? (record["equipment_name"] ?? record["equipment"] ?? record["name"])
+            : record[0])
+        ?.toString()
+        .trim() ?? '';
+
+    String locationText = (record is Map
+            ? (record["location_description"] ??
+                record["location_name"] ??
+                record["location"])
+            : (record[2] ?? record[3]))
+        ?.toString()
+        .trim() ?? '';
+
+    String areaText = (record is Map
+            ? (record["area"] ?? record["area_name"] ?? record["sub_location"])
+            : record[4])
+        ?.toString()
+        .trim() ?? '';
+
+    // Fallback to 'Not Specified' if empty, null, or string 'null'
+    if (equipmentText.isEmpty || equipmentText.toLowerCase() == 'null') {
+      equipmentText = 'Not Specified';
+    }
+    if (locationText.isEmpty || locationText.toLowerCase() == 'null') {
+      locationText = 'Not Specified';
+    }
+    if (areaText.isEmpty || areaText.toLowerCase() == 'null') {
+      areaText = 'Not Specified';
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),

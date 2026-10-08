@@ -94,36 +94,41 @@ class EquipmentService {
     request.fields['issuance_date'] = issuanceDate;
     request.fields['expiry_date'] = expiryDate;
     request.fields['inspector_name'] = inspectorName;
-    request.fields['area'] = equipmentData["area"];
-    request.fields['location_id'] = equipmentData["location_id"];
+    request.fields['area'] = equipmentData["area"]?.toString() ?? '';
+    request.fields['location_id'] = equipmentData["location_id"]?.toString() ?? '';
     request.fields['location_description'] =
-        equipmentData["location_description"] ?? '';
-    request.fields['location_name'] = equipmentData["location"] ?? '';
+        equipmentData["location_description"]?.toString() ?? '';
+    request.fields['location_name'] = equipmentData["location"]?.toString() ?? '';
     request.fields['created_by'] = inspectorId.toString();
-    request.fields['equipment_name'] = equipmentData["equipment_name"] ?? '';
+    request.fields['equipment_name'] = equipmentData["equipment_name"]?.toString() ?? '';
 
     if (notes != null && notes.trim().isNotEmpty) {
       request.fields['notes'] = notes.trim();
     }
 
-    // Checklist tags
+    // ── Safe Dynamic Checklist Key Mapping ──────────────────
     int index = 1;
     checklistItems.forEach((key, value) {
+      // Index tag format
       request.fields['tag$index'] = value;
+      // Direct tag name key format (as per Laravel dynamic payload)
+      request.fields[key] = value;
       index++;
     });
 
     var response = await request.send();
     var responseString = await response.stream.bytesToString();
 
+    print("STATUS CODE: ${response.statusCode}");
+    print("RAW SERVER RESPONSE: $responseString");
+
     dynamic decodedBody;
     try {
       decodedBody = jsonDecode(responseString);
-      print(decodedBody);
     } catch (e) {
       decodedBody = {
         "success": false,
-        "message": "Server error / Invalid Response"
+        "message": "Server error (${response.statusCode}): Raw response is not JSON"
       };
     }
 

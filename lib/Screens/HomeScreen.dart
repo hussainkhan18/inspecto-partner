@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:inspecto_shield_partner/LanguageTranslate/app_localizations.dart';
+import 'package:inspecto_shield_partner/Providers/app_mode_provider.dart';
 import 'package:inspecto_shield_partner/Providers/upcoming_inspection_provider.dart';
 import 'package:inspecto_shield_partner/Screens/Profile.dart';
+import 'package:inspecto_shield_partner/Screens/area_location_dialog.dart';
 import 'package:inspecto_shield_partner/Screens/complaints_screen.dart';
 import 'package:inspecto_shield_partner/Screens/equipment_info.dart';
 import 'package:inspecto_shield_partner/Screens/internet_error_popup.dart';
@@ -11,9 +14,14 @@ import 'package:inspecto_shield_partner/Screens/login.dart';
 import 'package:inspecto_shield_partner/Screens/my_record.dart';
 import 'package:inspecto_shield_partner/Screens/new_inspection.dart';
 import 'package:inspecto_shield_partner/Screens/upcoming_inspection_screen.dart';
+import 'package:inspecto_shield_partner/repositories/equipment_repository.dart';
+import 'package:inspecto_shield_partner/repositories/inspection_repository.dart';
 import 'package:inspecto_shield_partner/services/auth_service.dart';
+import 'package:inspecto_shield_partner/services/equipment_service.dart';
 import 'package:inspecto_shield_partner/services/home_service.dart';
 import 'package:inspecto_shield_partner/services/notification_service.dart';
+import 'package:inspecto_shield_partner/services/offline_equipment_service.dart';
+import 'package:internet_connection_checker/internet_connection_checker.dart';
 import 'package:loading_icon_button/loading_icon_button.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
@@ -204,11 +212,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                  color: statusBg.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                  color: statusBg.withOpacity(0.35),
-                  width: 1,
+                    color: statusBg.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: statusBg.withOpacity(0.35),
+                      width: 1,
                     ),
                   ),
                   child: Text(
@@ -370,447 +378,741 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.pop(context);
   }
 
+  Future<void> _handleModeToggle(BuildContext context, bool goOffline) async {
+    final mode = Provider.of<AppModeProvider>(context, listen: false);
+
+    if (goOffline) {
+      final selection = await showAreaLocationDialog(context);
+      if (selection == null) return;
+
+      mode.startFetchingEquipment(
+        areaId: selection['areaId']!,
+        areaName: selection['areaName']!,
+        locationId: selection['locationId'],
+        locationName: selection['locationName'],
+      );
+
+      final equipment =
+          await OfflineEquipmentService.fetchEquipmentForOfflineCache(
+        areaId: selection['areaId']!,
+        locationId: selection['locationId'],
+      );
+
+      if (equipment.isEmpty) {
+        mode.failFetch('No equipment found for this area.');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No equipment found for this area.')),
+          );
+        }
+        return;
+      }
+
+      try {
+        await EquipmentRepository.instance.refreshCache(
+          equipment,
+          onProgress: (done, total) {
+            if (total > 0) mode.updateFetchProgress(done / total);
+          },
+        );
+        await mode.completeFetchSuccess();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('You are now on Offline Mode')),
+          );
+        }
+      } catch (e) {
+        mode.failFetch('Failed to save equipment locally.');
+      }
+    } else {
+      await _runManualSync(context, mode);
+    }
+  }
+
+  Future<void> _runManualSync(
+      BuildContext context, AppModeProvider mode) async {
+    final repository = InspectionRepository.instance;
+
+    final hasInternet = await InternetConnectionChecker().hasConnection;
+    if (!hasInternet) {
+      await mode.completeSyncPartial(
+          'No internet connection. Try again when online.');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'No internet connection. Your inspections are still saved and pending.')),
+        );
+      }
+      return;
+    }
+
+    final pending = await repository.getPendingInspections();
+
+    if (pending.isEmpty) {
+      await mode.completeSyncSuccess();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You are back to Online Mode')),
+        );
+      }
+      return;
+    }
+
+    mode.startSyncing(pending.length);
+
+    int succeeded = 0;
+    int stillPending = 0;
+
+    for (final inspection in pending) {
+      try {
+        final checklistItems = Map<String, String>.from(
+          jsonDecode(inspection['checklist_json'] as String) as Map,
+        );
+        final imageFile = File(inspection['image_path'] as String);
+
+        if (!await imageFile.exists()) {
+          await repository.markFailed(
+              inspection['local_id'] as String, 'Image file missing');
+          stillPending++;
+        } else {
+          File? certFile;
+          final certPath = inspection['certificate_path'] as String?;
+          if (certPath != null && certPath.isNotEmpty) {
+            final f = File(certPath);
+            if (await f.exists()) certFile = f;
+          }
+
+          final result = await EquipmentService.saveCheckList(
+            equipmentData: {
+              'equipment_id': inspection['equipment_id'],
+              'checklist_id': inspection['checklist_id'],
+              'area': inspection['area'],
+              'location_id': inspection['location_id'],
+              'location_description': inspection['location_description'],
+              'location': inspection['location_name'],
+              'equipment_name': inspection['equipment_name'],
+            },
+            imageFile: imageFile,
+            certificateFile: certFile,
+            reportId: inspection['report_id'].toString(),
+            inspectorId: inspection['inspector_id'] as int,
+            inspectorName: inspection['inspector_name'].toString(),
+            issuanceDate: inspection['issuance_date']?.toString() ?? '',
+            expiryDate: inspection['expiry_date']?.toString() ?? '',
+            checklistItems: checklistItems,
+            notes: inspection['notes']?.toString(),
+          );
+
+          if (result['statusCode'] == 200) {
+            await repository.deleteAfterSync(
+              inspection['local_id'] as String,
+              imagePath: inspection['image_path'] as String?,
+              certificatePath: inspection['certificate_path'] as String?,
+            );
+            succeeded++;
+          } else {
+            await repository.markFailed(
+                inspection['local_id'] as String, result['body'].toString());
+            stillPending++;
+          }
+        }
+      } catch (e) {
+        await repository.markFailed(
+            inspection['local_id'] as String, e.toString());
+        stillPending++;
+      }
+      mode.updateSyncProgress(succeeded + stillPending);
+    }
+
+    if (stillPending > 0) {
+      await mode
+          .completeSyncPartial('$succeeded synced, $stillPending will retry.');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Synced $succeeded items. $stillPending pending retry.')),
+        );
+      }
+    } else {
+      await mode.completeSyncSuccess();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'All $succeeded items synced! You are back to Online Mode.')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 40, bottom: 30),
-                child: Image.asset("assets/icon/logo.png",
-                    width: 100, height: 100),
-              ),
+        child: Stack(children: [
+          SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 40, bottom: 30),
+                  child: Image.asset("assets/icon/logo.png",
+                      width: 100, height: 100),
+                ),
 
-              // ─── NEW INSPECTION ───────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: ArgonButton(
-                  width: MediaQuery.of(context).size.width,
-                  height: 50,
-                  borderRadius: 8.0,
-                  elevation: 10,
-                  color: Colors.black,
-                  borderSide: const BorderSide(color: Colors.teal),
-                  child: Text(
-                    AppLocalizations.of(context)!.translate('NEW INSPECTION'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
+                // ─── NEW INSPECTION ───────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: ArgonButton(
+                    width: MediaQuery.of(context).size.width,
+                    height: 50,
+                    borderRadius: 8.0,
+                    elevation: 10,
+                    color: Colors.black,
+                    borderSide: const BorderSide(color: Colors.teal),
+                    child: Text(
+                      AppLocalizations.of(context)!.translate('NEW INSPECTION'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                  onTap: (startLoading, stopLoading, btnState) async {
-                    bool isNavigated = false;
+                    onTap: (startLoading, stopLoading, btnState) async {
+                      bool isNavigated = false;
 
-                    Alert(
-                      context: context,
-                      title: "Scan QR Code",
-                      content: SizedBox(
-                        height: 400,
-                        width: 300,
-                        child: MobileScanner(
-                          controller:
-                              controller, // Pass the controller to the MobileScanner
-                          onDetect: (BarcodeCapture barcodeCapture) {
-                            if (isNavigated) return;
-                            isNavigated = true;
+                      Alert(
+                        context: context,
+                        title: "Scan QR Code",
+                        content: SizedBox(
+                          height: 400,
+                          width: 300,
+                          child: MobileScanner(
+                            controller:
+                                controller, // Pass the controller to the MobileScanner
+                            onDetect: (BarcodeCapture barcodeCapture) async {
+                              if (isNavigated) return;
+                              isNavigated = true;
 
-                            final String? code =
-                                barcodeCapture.barcodes.first.rawValue;
-                            print('Raw QR Code Data: $code');
+                              final String? code =
+                                  barcodeCapture.barcodes.first.rawValue;
+                              print('Raw QR Code Data: $code');
 
-                            if (code != null && code.trim().startsWith('{')) {
-                              try {
-                                final decodedData = json.decode(code);
+                              if (code != null && code.trim().startsWith('{')) {
+                                try {
+                                  final decodedData = json.decode(code);
 
-                                if (decodedData is Map) {
-                                  Navigator.pop(context);
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => NetworkWrapper(
-                                        child: NewInspection(
-                                          data: decodedData,
-                                          id: widget.id,
-                                          name: widget.name,
-                                          branch: widget.branch,
-                                          company: widget.company,
-                                          email: widget.email,
-                                          // password: widget.password,
-                                          image: widget.image,
-                                          contact: widget.contact,
-                                        ),
+                                  if (decodedData is Map) {
+                                    final mode = Provider.of<AppModeProvider>(
+                                        context,
+                                        listen: false);
+                                    final reportId =
+                                        decodedData["report_id"]?.toString();
+                                    Map<String, dynamic>? prefetchedData;
+
+                                    if (mode.isOfflineMode) {
+                                      if (reportId == null ||
+                                          reportId.isEmpty) {
+                                        Navigator.pop(context);
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                              content: Text(
+                                                  'Invalid QR code data.')),
+                                        );
+                                        return;
+                                      }
+
+                                      prefetchedData = await EquipmentRepository
+                                          .instance
+                                          .lookupByReportId(reportId);
+
+                                      if (!mounted) return;
+
+                                      if (prefetchedData == null) {
+                                        Navigator.pop(context);
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                              content: Text(
+                                                  'This equipment is not available in offline data.')),
+                                        );
+                                        return;
+                                      }
+                                    }
+
+                                    Widget screen = NewInspection(
+                                      data: decodedData,
+                                      id: widget.id,
+                                      name: widget.name,
+                                      branch: widget.branch,
+                                      company: widget.company,
+                                      email: widget.email,
+                                      image: widget.image,
+                                      contact: widget.contact,
+                                      isOfflineMode: mode.isOfflineMode,
+                                      prefetchedEquipmentData: prefetchedData,
+                                    );
+
+                                    if (!mode.isOfflineMode)
+                                      screen = NetworkWrapper(child: screen);
+
+                                    Navigator.pop(context);
+                                    Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (context) => screen));
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content:
+                                            Text('Unexpected QR code format.'),
+                                        duration: Duration(seconds: 3),
                                       ),
-                                    ),
-                                  );
-                                } else {
+                                    );
+                                  }
+                                } catch (e) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content:
-                                          Text('Unexpected QR code format.'),
+                                      content: Text(
+                                          'Failed to decode QR code data.'),
                                       duration: Duration(seconds: 3),
                                     ),
                                   );
                                 }
-                              } catch (e) {
+                              } else {
+                                print("Invalid QR code format.");
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content:
-                                        Text('Failed to decode QR code data.'),
-                                    duration: Duration(seconds: 3),
+                                    content: Text(
+                                      'Ensure QR code is scanned under optimal conditions.',
+                                    ),
+                                    duration: Duration(seconds: 5),
                                   ),
                                 );
                               }
-                            } else {
-                              print("Invalid QR code format.");
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Ensure QR code is scanned under optimal conditions.',
-                                  ),
-                                  duration: Duration(seconds: 5),
-                                ),
-                              );
-                            }
-                          },
-                        ),
-                      ),
-                      buttons: [
-                        DialogButton(
-                          onPressed: () => Navigator.pop(context),
-                          color: Colors.red,
-                          child: const Text(
-                            "Cancel",
-                            style: TextStyle(color: Colors.white, fontSize: 18),
+                            },
                           ),
                         ),
-                      ],
-                    ).show();
-                  },
-                ),
-              ),
-
-              // ─── EQUIPMENT INFO ───────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: ArgonButton(
-                  width: MediaQuery.of(context).size.width,
-                  height: 50,
-                  borderRadius: 8.0,
-                  elevation: 10,
-                  color: Colors.black,
-                  borderSide: const BorderSide(color: Colors.teal),
-                  child: Text(
-                    AppLocalizations.of(context)!.translate('EQUIPMENT INFO'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
+                        buttons: [
+                          DialogButton(
+                            onPressed: () => Navigator.pop(context),
+                            color: Colors.red,
+                            child: const Text(
+                              "Cancel",
+                              style:
+                                  TextStyle(color: Colors.white, fontSize: 18),
+                            ),
+                          ),
+                        ],
+                      ).show();
+                    },
                   ),
-                  onTap: (startLoading, stopLoading, btnState) async {
-                    Alert(
-                      context: context,
-                      title: "Scan QR Code",
-                      content: SizedBox(
-                        height: 400,
-                        width: 300,
-                        child: MobileScanner(
-                          controller:
-                              controller, // Pass the controller to the MobileScanner
-                          onDetect: (BarcodeCapture barcodeCapture) {
-                            final String? code =
-                                barcodeCapture.barcodes.first.rawValue;
-                            print('Raw QR Code Data: $code');
+                ),
 
-                            if (code != null && code.trim().startsWith('{')) {
-                              try {
-                                final decodedData = json.decode(code);
+                // ─── EQUIPMENT INFO ───────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: ArgonButton(
+                    width: MediaQuery.of(context).size.width,
+                    height: 50,
+                    borderRadius: 8.0,
+                    elevation: 10,
+                    color: Colors.black,
+                    borderSide: const BorderSide(color: Colors.teal),
+                    child: Text(
+                      AppLocalizations.of(context)!.translate('EQUIPMENT INFO'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    onTap: (startLoading, stopLoading, btnState) async {
+                      Alert(
+                        context: context,
+                        title: "Scan QR Code",
+                        content: SizedBox(
+                          height: 400,
+                          width: 300,
+                          child: MobileScanner(
+                            controller:
+                                controller, // Pass the controller to the MobileScanner
+                            onDetect: (BarcodeCapture barcodeCapture) {
+                              final String? code =
+                                  barcodeCapture.barcodes.first.rawValue;
+                              print('Raw QR Code Data: $code');
 
-                                if (decodedData is Map) {
-                                  Navigator.pop(context);
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => NetworkWrapper(
-                                        child: EquipementInfo(
-                                          data: decodedData,
+                              if (code != null && code.trim().startsWith('{')) {
+                                try {
+                                  final decodedData = json.decode(code);
+
+                                  if (decodedData is Map) {
+                                    Navigator.pop(context);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => NetworkWrapper(
+                                          child: EquipementInfo(
+                                            data: decodedData,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  );
-                                } else {
-                                  _showError(
-                                      context, 'Unexpected QR code format.');
+                                    );
+                                  } else {
+                                    _showError(
+                                        context, 'Unexpected QR code format.');
+                                  }
+                                } catch (e) {
+                                  _showError(context,
+                                      'Failed to decode QR code data.');
                                 }
-                              } catch (e) {
-                                _showError(
-                                    context, 'Failed to decode QR code data.');
+                              } else {
+                                _showError(context, 'Invalid QR code format.');
                               }
-                            } else {
-                              _showError(context, 'Invalid QR code format.');
-                            }
-                          },
-                        ),
-                      ),
-                      buttons: [
-                        DialogButton(
-                          onPressed: () => Navigator.pop(context),
-                          color: Colors.red,
-                          child: const Text(
-                            "Cancel",
-                            style: TextStyle(color: Colors.white, fontSize: 18),
+                            },
                           ),
                         ),
-                      ],
-                    ).show();
-                  },
-                ),
-              ),
-
-              // ─── COMPLAINTS ───────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: ArgonButton(
-                  width: MediaQuery.of(context).size.width,
-                  height: 50,
-                  borderRadius: 8.0,
-                  elevation: 10,
-                  color: Colors.black,
-                  borderSide: const BorderSide(color: Colors.teal),
-                  child: Text(
-                    AppLocalizations.of(context)!.translate('COMPLAINTS'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
+                        buttons: [
+                          DialogButton(
+                            onPressed: () => Navigator.pop(context),
+                            color: Colors.red,
+                            child: const Text(
+                              "Cancel",
+                              style:
+                                  TextStyle(color: Colors.white, fontSize: 18),
+                            ),
+                          ),
+                        ],
+                      ).show();
+                    },
                   ),
-                  onTap: (startLoading, stopLoading, btnState) async {
-                    bool isNavigated = false;
+                ),
 
-                    Alert(
-                      context: context,
-                      title: "Scan QR Code",
-                      content: SizedBox(
-                        height: 400,
-                        width: 300,
-                        child: MobileScanner(
-                          controller: controller,
-                          onDetect: (BarcodeCapture barcodeCapture) {
-                            if (isNavigated) return;
-                            isNavigated = true;
+                // ─── COMPLAINTS ───────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: ArgonButton(
+                    width: MediaQuery.of(context).size.width,
+                    height: 50,
+                    borderRadius: 8.0,
+                    elevation: 10,
+                    color: Colors.black,
+                    borderSide: const BorderSide(color: Colors.teal),
+                    child: Text(
+                      AppLocalizations.of(context)!.translate('COMPLAINTS'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    onTap: (startLoading, stopLoading, btnState) async {
+                      bool isNavigated = false;
 
-                            final String? code =
-                                barcodeCapture.barcodes.first.rawValue;
+                      Alert(
+                        context: context,
+                        title: "Scan QR Code",
+                        content: SizedBox(
+                          height: 400,
+                          width: 300,
+                          child: MobileScanner(
+                            controller: controller,
+                            onDetect: (BarcodeCapture barcodeCapture) {
+                              if (isNavigated) return;
+                              isNavigated = true;
 
-                            if (code != null && code.trim().startsWith('{')) {
-                              try {
-                                final decodedData = json.decode(code);
+                              final String? code =
+                                  barcodeCapture.barcodes.first.rawValue;
 
-                                if (decodedData is Map) {
-                                  Navigator.pop(context);
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => NetworkWrapper(
-                                        child: ComplaintsScreen(
-                                          data: decodedData,
+                              if (code != null && code.trim().startsWith('{')) {
+                                try {
+                                  final decodedData = json.decode(code);
+
+                                  if (decodedData is Map) {
+                                    Navigator.pop(context);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => NetworkWrapper(
+                                          child: ComplaintsScreen(
+                                            data: decodedData,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  );
-                                } else {
+                                    );
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content:
+                                            Text('Unexpected QR code format.'),
+                                        duration: Duration(seconds: 3),
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content:
-                                          Text('Unexpected QR code format.'),
+                                      content: Text(
+                                          'Failed to decode QR code data.'),
                                       duration: Duration(seconds: 3),
                                     ),
                                   );
                                 }
-                              } catch (e) {
+                              } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content:
-                                        Text('Failed to decode QR code data.'),
-                                    duration: Duration(seconds: 3),
+                                    content: Text(
+                                      'Ensure QR code is scanned under optimal conditions.',
+                                    ),
+                                    duration: Duration(seconds: 5),
                                   ),
                                 );
                               }
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Ensure QR code is scanned under optimal conditions.',
-                                  ),
-                                  duration: Duration(seconds: 5),
-                                ),
-                              );
-                            }
-                          },
-                        ),
-                      ),
-                      buttons: [
-                        DialogButton(
-                          onPressed: () => Navigator.pop(context),
-                          color: Colors.red,
-                          child: const Text(
-                            "Cancel",
-                            style: TextStyle(color: Colors.white, fontSize: 18),
+                            },
                           ),
                         ),
-                      ],
-                    ).show();
-                  },
-                ),
-              ),
-
-              // ─── UPCOMING INSPECTION ──────────────────────────────
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: ArgonButton(
-                  width: MediaQuery.of(context).size.width,
-                  height: 50,
-                  borderRadius: 8.0,
-                  elevation: 10,
-                  color: Colors.black,
-                  borderSide: const BorderSide(color: Colors.teal),
-                  child: Text(
-                    AppLocalizations.of(context)!
-                        .translate('UPCOMING INSPECTION'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
+                        buttons: [
+                          DialogButton(
+                            onPressed: () => Navigator.pop(context),
+                            color: Colors.red,
+                            child: const Text(
+                              "Cancel",
+                              style:
+                                  TextStyle(color: Colors.white, fontSize: 18),
+                            ),
+                          ),
+                        ],
+                      ).show();
+                    },
                   ),
-                  onTap: (startLoading, stopLoading, btnState) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => NetworkWrapper(
-                          child: ChangeNotifierProvider(
-                            create: (_) => UpcomingInspectionProvider(),
-                            child: UpcomingInspectionScreen(
-                              userId: widget.id,
+                ),
+
+                // ─── UPCOMING INSPECTION ──────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: ArgonButton(
+                    width: MediaQuery.of(context).size.width,
+                    height: 50,
+                    borderRadius: 8.0,
+                    elevation: 10,
+                    color: Colors.black,
+                    borderSide: const BorderSide(color: Colors.teal),
+                    child: Text(
+                      AppLocalizations.of(context)!
+                          .translate('UPCOMING INSPECTION'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    onTap: (startLoading, stopLoading, btnState) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NetworkWrapper(
+                            child: ChangeNotifierProvider(
+                              create: (_) => UpcomingInspectionProvider(),
+                              child: UpcomingInspectionScreen(
+                                userId: widget.id,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-              // ─── MY RECORD ────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: ArgonButton(
-                  width: MediaQuery.of(context).size.width,
-                  height: 50,
-                  borderRadius: 8.0,
-                  elevation: 10,
-                  color: Colors.black,
-                  borderSide: const BorderSide(color: Colors.teal),
-                  child: Text(
-                    AppLocalizations.of(context)!.translate('MY RECORD'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
+                      );
+                    },
                   ),
-                  onTap: (startLoading, stopLoading, btnState) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            NetworkWrapper(child: MyRecords(id: widget.id)),
-                      ),
-                    );
-                  },
                 ),
-              ),
 
-              // ─── MY ACCOUNT ───────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: ArgonButton(
-                  width: MediaQuery.of(context).size.width,
-                  height: 50,
-                  borderRadius: 8.0,
-                  elevation: 10,
-                  color: Colors.black,
-                  borderSide: const BorderSide(color: Colors.teal),
-                  child: Text(
-                    AppLocalizations.of(context)!.translate('MY ACCOUNT'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
+                // ─── MY RECORD ────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: ArgonButton(
+                    width: MediaQuery.of(context).size.width,
+                    height: 50,
+                    borderRadius: 8.0,
+                    elevation: 10,
+                    color: Colors.black,
+                    borderSide: const BorderSide(color: Colors.teal),
+                    child: Text(
+                      AppLocalizations.of(context)!.translate('MY RECORD'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
+                    onTap: (startLoading, stopLoading, btnState) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              NetworkWrapper(child: MyRecords(id: widget.id)),
+                        ),
+                      );
+                    },
                   ),
-                  onTap: (startLoading, stopLoading, btnState) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => NetworkWrapper(
-                          child: Profile(
-                            id: widget.id,
-                            name: widget.name,
-                            company: widget.company,
-                            branch: widget.branch,
-                            email: widget.email,
-                            // password: widget.password,
-                            image: widget.image,
-                            contact: widget.contact,
+                ),
+
+                // ─── MY ACCOUNT ───────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: ArgonButton(
+                    width: MediaQuery.of(context).size.width,
+                    height: 50,
+                    borderRadius: 8.0,
+                    elevation: 10,
+                    color: Colors.black,
+                    borderSide: const BorderSide(color: Colors.teal),
+                    child: Text(
+                      AppLocalizations.of(context)!.translate('MY ACCOUNT'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    onTap: (startLoading, stopLoading, btnState) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NetworkWrapper(
+                            child: Profile(
+                              id: widget.id,
+                              name: widget.name,
+                              company: widget.company,
+                              branch: widget.branch,
+                              email: widget.email,
+                              // password: widget.password,
+                              image: widget.image,
+                              contact: widget.contact,
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
 
-              // ─── LOGOUT ───────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: ArgonButton(
-                  width: MediaQuery.of(context).size.width,
-                  height: 50,
-                  borderRadius: 8.0,
-                  elevation: 10,
-                  color: Colors.black,
-                  borderSide: const BorderSide(color: Colors.teal),
-                  child: Text(
-                    AppLocalizations.of(context)!.translate('LOGOUT'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
+                // ─── LOGOUT ───────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: ArgonButton(
+                    width: MediaQuery.of(context).size.width,
+                    height: 50,
+                    borderRadius: 8.0,
+                    elevation: 10,
+                    color: Colors.black,
+                    borderSide: const BorderSide(color: Colors.teal),
+                    child: Text(
+                      AppLocalizations.of(context)!.translate('LOGOUT'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    onTap: (startLoading, stopLoading, btnState) async {
+                      startLoading();
+                      await AuthService.logout();
+                      stopLoading();
+                      if (context.mounted) {
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const LoginScreen()),
+                          (route) => false,
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Consumer<AppModeProvider>(
+              builder: (context, mode, _) {
+                final isOffline = mode.isOfflineMode;
+                final color = isOffline
+                    ? const Color(0xFFF59E0B)
+                    : const Color(0xff0DC5B9);
+
+                return GestureDetector(
+                  onTap: mode.isBusy
+                      ? null
+                      : () => _handleModeToggle(context, !isOffline),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: color.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isOffline
+                              ? Icons.wifi_off_rounded
+                              : Icons.wifi_rounded,
+                          size: 13,
+                          color: color,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isOffline
+                              ? 'Offline${mode.pendingCount > 0 ? " (${mode.pendingCount})" : ""}'
+                              : 'Online',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: color),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          isOffline
+                              ? Icons.toggle_off_outlined
+                              : Icons.toggle_on_outlined,
+                          size: 19,
+                          color: const Color(0xff0DC5B9),
+                        ),
+                      ],
                     ),
                   ),
-                  onTap: (startLoading, stopLoading, btnState) async {
-                    startLoading();
-                    await AuthService.logout();
-                    stopLoading();
-                    if (context.mounted) {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                        (route) => false,
-                      );
-                    }
-                  },
-                ),
-              ),
-            ],
+                );
+              },
+            ),
           ),
-        ),
+
+          // Fetch / Sync progress bar (top)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Consumer<AppModeProvider>(
+              builder: (context, mode, _) {
+                if (!mode.isBusy) return const SizedBox.shrink();
+                final value = mode.isFetching
+                    ? mode.fetchProgress
+                    : (mode.syncTotal == 0
+                        ? null
+                        : mode.syncDone / mode.syncTotal);
+                return LinearProgressIndicator(
+                  value: value,
+                  color: const Color(0xff0DC5B9),
+                  minHeight: 3,
+                );
+              },
+            ),
+          ),
+        ]),
       ),
     );
   }

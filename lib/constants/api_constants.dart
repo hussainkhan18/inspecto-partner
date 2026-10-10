@@ -24,4 +24,8 @@ class ApiConstants {
   static const String complaints = '$baseUrl/complaints';
   // Get Complaints
   static const String getComplaints = '$baseUrl/get_complaints';
+    // Offline Mode
+  static const String offlineAreas = '$baseUrl/offline/areas';
+  static const String offlineLocations = '$baseUrl/offline/locations';
+  static const String offlineEquipmentData = '$baseUrl/offline/equipment-data';
 }

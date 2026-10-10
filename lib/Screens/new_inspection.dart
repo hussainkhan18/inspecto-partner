@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:inspecto_shield_partner/LanguageTranslate/app_localizations.dart';
+import 'package:inspecto_shield_partner/Providers/app_mode_provider.dart';
 import 'package:inspecto_shield_partner/Providers/checklist_Provider.dart';
 import 'package:inspecto_shield_partner/Screens/HomeScreen.dart';
+import 'package:inspecto_shield_partner/repositories/inspection_repository.dart';
 import 'package:inspecto_shield_partner/services/equipment_service.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:inspecto_shield_partner/services/offline_image_storage.dart';
 import 'package:intl/intl.dart';
 import 'package:loading_icon_button/loading_icon_button.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +25,8 @@ class NewInspection extends StatefulWidget {
   final String email;
   final String image;
   final String contact;
+  final bool isOfflineMode;
+  final Map<String, dynamic>? prefetchedEquipmentData;
 
   const NewInspection({
     super.key,
@@ -32,6 +38,8 @@ class NewInspection extends StatefulWidget {
     required this.email,
     required this.image,
     required this.contact,
+    this.isOfflineMode = false,
+    this.prefetchedEquipmentData,
   });
 
   @override
@@ -181,6 +189,15 @@ class _NewInspectionState extends State<NewInspection> {
               );
               return;
             }
+            if (widget.isOfflineMode) {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text(
+                        "Certificate will be uploaded with the inspection.")),
+              );
+              return;
+            }
             await postCertificateDataToAPI(
               widget.data["equipment_id"].toString(),
               _certificate,
@@ -259,6 +276,7 @@ class _NewInspectionState extends State<NewInspection> {
   }
 
   Future<Map<String, dynamic>?> fetchEquipmentData(String reportId) async {
+    if (widget.isOfflineMode) return widget.prefetchedEquipmentData;
     return await EquipmentService.fetchEquipmentData(reportId);
   }
 
@@ -324,6 +342,45 @@ class _NewInspectionState extends State<NewInspection> {
         return;
       }
 
+      if (widget.isOfflineMode) {
+        final savedImage =
+            await OfflineImageStorage.persistImage(_image!, 'inspection');
+        File? savedCert;
+        if (_certificate != null) {
+          savedCert =
+              await OfflineImageStorage.persistImage(_certificate!, 'cert');
+        }
+
+        await InspectionRepository.instance.saveOfflineInspection({
+          'local_id': DateTime.now().microsecondsSinceEpoch.toString(),
+          'report_id': widget.data["report_id"].toString(),
+          'equipment_id': equipmentData['equipment_id']?.toString(),
+          'equipment_name': equipmentData['equipment_name']?.toString(),
+          'area': equipmentData['area']?.toString(),
+          'location_id': equipmentData['location_id']?.toString(),
+          'location_name': equipmentData['location']?.toString(),
+          'location_description':
+              equipmentData['location_description']?.toString(),
+          'checklist_id': equipmentData['checklist_id']?.toString(),
+          'inspector_id': widget.id,
+          'inspector_name': widget.name,
+          'issuance_date': issueDate.text,
+          'expiry_date': expiryDate.text,
+          'notes': _notesController.text.trim(),
+          'checklist_json': jsonEncode(checklistProvider.items),
+          'image_path': savedImage.path,
+          'certificate_path': savedCert?.path,
+          'created_at': DateTime.now().toIso8601String(),
+          'sync_status': 'pending',
+        });
+
+        if (!mounted) return;
+        await Provider.of<AppModeProvider>(context, listen: false)
+            .refreshPendingCount();
+        showSuccessAnimation(context);
+        return;
+      }
+
       final result = await EquipmentService.saveCheckList(
         equipmentData: equipmentData,
         imageFile: _image!,
@@ -336,7 +393,7 @@ class _NewInspectionState extends State<NewInspection> {
         checklistItems: Map<String, String>.from(checklistProvider.items),
         notes: _notesController.text,
       );
-print("POST RESPONSE BODY: ${result['body']}");
+      print("POST RESPONSE BODY: ${result['body']}");
       if (!mounted) return;
 
       if (result['statusCode'] == 200) {
@@ -451,26 +508,41 @@ print("POST RESPONSE BODY: ${result['body']}");
                           ClipRRect(
                             borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(16)),
-                            child: Image.network(
-                              _equipmentData?["equipment_img"] ??
-                                  "https://hashbaqala.bssstageserverforpanels.xyz/upload/profileImage/user.png",
-                              width: double.infinity,
-                              height: MediaQuery.of(context).size.height * 0.25,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) => Container(
-                                width: double.infinity,
-                                height:
-                                    MediaQuery.of(context).size.height * 0.25,
-                                color: const Color(0xffF0F0F0),
-                                child: const Icon(Icons.image_not_supported,
-                                    color: Colors.grey, size: 48),
-                              ),
-                            ),
+                            child: (widget.isOfflineMode &&
+                                    _equipmentData?['local_image_path'] !=
+                                        null &&
+                                    File(_equipmentData!['local_image_path'])
+                                        .existsSync())
+                                ? Image.file(
+                                    File(_equipmentData!['local_image_path']),
+                                    width: double.infinity,
+                                    height: MediaQuery.of(context).size.height *
+                                        0.25,
+                                    fit: BoxFit.contain,
+                                  )
+                                : Image.network(
+                                    _equipmentData?["equipment_img"] ??
+                                        "https://hashbaqala.bssstageserverforpanels.xyz/upload/profileImage/user.png",
+                                    width: double.infinity,
+                                    height: MediaQuery.of(context).size.height *
+                                        0.25,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      width: double.infinity,
+                                      height:
+                                          MediaQuery.of(context).size.height *
+                                              0.25,
+                                      color: const Color(0xffF0F0F0),
+                                      child: const Icon(
+                                          Icons.image_not_supported,
+                                          color: Colors.grey,
+                                          size: 48),
+                                    ),
+                                  ),
                           ),
                           Visibility(
                             visible: _equipmentData != null &&
-                                (_equipmentData!['certificate_permission'] ==
-                                        'yes' ||
+                                (_equipmentData!['certificate_permission'] == 'yes' ||
                                     _equipmentData!['certificate_permission'] ==
                                         'YES' ||
                                     _equipmentData!['certificate_permission'] ==

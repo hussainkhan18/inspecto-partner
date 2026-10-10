@@ -21,7 +21,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _checkSessionAndNavigate() async {
     final results = await Future.wait([
-      Future.delayed(const Duration(seconds: 7)),
+      Future.delayed(const Duration(seconds: 10)),
       _loadSessionData(),
     ]);
 
@@ -88,7 +88,7 @@ class _SplashScreenState extends State<SplashScreen> {
         width: double.infinity,
         child: Image.asset(
           "assets/inspecto_partner_splash.gif",
-          fit: BoxFit.fill,
+          fit: BoxFit.cover,
         ),
       ),
     );

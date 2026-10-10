@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:inspecto_shield_partner/Providers/app_mode_provider.dart';
 import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
@@ -38,6 +39,9 @@ void main() async {
         ChangeNotifierProvider<LocaleProvider>(create: (_) => LocaleProvider()),
         ChangeNotifierProvider<ChecklistProvider>(
           create: (_) => ChecklistProvider(),
+        ),
+        ChangeNotifierProvider<AppModeProvider>(
+          create: (_) => AppModeProvider(),
         ),
         ChangeNotifierProvider<EditProfileProvider>(
           create: (_) => EditProfileProvider(),

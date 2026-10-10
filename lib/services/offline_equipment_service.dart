@@ -2,20 +2,25 @@ import 'dart:convert';
 import 'package:inspecto_shield_partner/constants/api_constants.dart';
 import 'package:inspecto_shield_partner/models/offline_data_model.dart';
 import 'package:http/http.dart' as http;
+import 'package:inspecto_shield_partner/services/secure_storage_service.dart';
 
 class OfflineEquipmentService {
-  // Agar tumhare partner app me token use hota hai to yahan SecureStorage se
-  // token add kar do (jaisa Shield me tha). Warna ye headers kaafi hain.
-  static Future<Map<String, String>> _headers() async => {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
+  static Future<Map<String, String>> _headers() async {
+    final token = await SecureStorageService.getToken();
+    return {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+  }
 
-  static Future<List<OfflineAreaModel>> fetchOfflineAreas() async {
+    static Future<List<OfflineAreaModel>> fetchOfflineAreas() async {
     try {
+      final headers = await _headers();
       final response = await http
-          .get(Uri.parse(ApiConstants.offlineAreas), headers: await _headers())
+          .get(Uri.parse(ApiConstants.offlineAreas), headers: headers)
           .timeout(const Duration(seconds: 15));
+      print('AREAS STATUS: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final jsonResponse = json.decode(response.body);

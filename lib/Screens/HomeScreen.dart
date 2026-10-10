@@ -1068,7 +1068,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(width: 4),
                         Text(
                           isOffline
-                              ? 'Offline${mode.pendingCount > 0 ? " (${mode.pendingCount})" : ""}'
+                              ? 'Offline'
                               : 'Online',
                           style: TextStyle(
                               fontSize: 11,
@@ -1086,28 +1086,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-
-          // Fetch / Sync progress bar (top)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Consumer<AppModeProvider>(
-              builder: (context, mode, _) {
-                if (!mode.isBusy) return const SizedBox.shrink();
-                final value = mode.isFetching
-                    ? mode.fetchProgress
-                    : (mode.syncTotal == 0
-                        ? null
-                        : mode.syncDone / mode.syncTotal);
-                return LinearProgressIndicator(
-                  value: value,
-                  color: const Color(0xff0DC5B9),
-                  minHeight: 3,
                 );
               },
             ),

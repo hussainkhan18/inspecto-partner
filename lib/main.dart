@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:inspecto_shield_partner/Providers/app_mode_provider.dart';
+import 'package:inspecto_shield_partner/Screens/offline_mode_wrapper.dart';
 import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
@@ -99,6 +100,8 @@ class _MyAppState extends State<MyApp> {
         useMaterial3: true,
       ),
       home: const SplashScreen(),
+      builder: (context, child) =>
+          OfflineModeWrapper(child: child ?? const SizedBox.shrink()),
     );
   }
 }

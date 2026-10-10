@@ -3,6 +3,7 @@ import 'package:inspecto_shield_partner/repositories/inspection_repository.dart'
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum AppModeStatus { online, fetching, offline, syncing }
+enum SyncPhase { idle, fetchingEquipment, syncing }
 
 class AppModeProvider extends ChangeNotifier {
   static const _kOffline = 'partner_offline_mode';
@@ -32,8 +33,12 @@ class AppModeProvider extends ChangeNotifier {
   String? get areaName => _areaName;
   String? get locationName => _locationName;
   String? get message => _message;
+    SyncPhase get phase => isFetching
+      ? SyncPhase.fetchingEquipment
+      : (isSyncing ? SyncPhase.syncing : SyncPhase.idle);
+  int get syncCompleted => _syncDone;
+  int get pendingComplianceCount => 0; 
 
-  /// App start par call karo (main.dart me)
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_kOffline) ?? false) {

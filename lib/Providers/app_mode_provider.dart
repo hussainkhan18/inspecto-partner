@@ -50,7 +50,6 @@ class AppModeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ───── Go offline (fetch) ─────
   void startFetchingEquipment({
     required String areaId,
     required String areaName,
@@ -88,7 +87,6 @@ class AppModeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ───── Back online (sync) ─────
   void startSyncing(int total) {
     _syncTotal = total;
     _syncDone = 0;
@@ -112,7 +110,6 @@ class AppModeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Kuch items sync nahi hue / internet nahi: offline mode me hi raho
   Future<void> completeSyncPartial(String msg) async {
     _message = msg;
     _status = AppModeStatus.offline;

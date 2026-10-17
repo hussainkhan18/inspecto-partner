@@ -54,7 +54,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   // final MobileScannerController _controller = MobileScannerController();
   final MobileScannerController controller = MobileScannerController();
   StreamSubscription<Object?>? _subscription;
@@ -63,9 +64,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final AudioPlayer _audioPlayer = AudioPlayer();
 
+  int _selectedTabIndex = 0;
+  late TabController _tabController;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.index != _selectedTabIndex) {
+        setState(() => _selectedTabIndex = _tabController.index);
+      }
+    });
     _initAudio();
     _setupNotificationListener();
   }
@@ -547,491 +557,671 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Widget _buildCustomTabBar() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      height: 48,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(25),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final tabWidth = constraints.maxWidth / 2;
+          return Stack(
+            children: [
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                left: _selectedTabIndex * tabWidth,
+                top: 0,
+                bottom: 0,
+                width: tabWidth,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(21),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  _buildTabItem('Inspection', 0, Icons.search_rounded),
+                  _buildTabItem(
+                      'Compliance', 1, Icons.assignment_turned_in_rounded),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTabItem(String title, int index, IconData icon) {
+    final isSelected = _selectedTabIndex == index;
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _tabController.animateTo(index),
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    size: 18,
+                    color: isSelected
+                        ? const Color(0xff0DC5B9)
+                        : Colors.grey.shade600,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: isSelected
+                          ? const Color(0xff0DC5B9)
+                          : Colors.grey.shade600,
+                      fontSize: 13,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildComplianceComingSoon() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 80),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xff0DC5B9).withOpacity(0.1),
+            ),
+            child: const Icon(
+              Icons.assignment_turned_in_rounded,
+              size: 44,
+              color: Color(0xff0DC5B9),
+            ),
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'Coming Soon',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Compliance is on its way.',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: Stack(children: [
-          SingleChildScrollView(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 40, bottom: 30),
-                  child: Image.asset("assets/icon/logo.png",
-                      width: 100, height: 100),
-                ),
-
-                // ─── NEW INSPECTION ───────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: ArgonButton(
-                    width: MediaQuery.of(context).size.width,
-                    height: 50,
-                    borderRadius: 8.0,
-                    elevation: 10,
-                    color: Colors.black,
-                    borderSide: const BorderSide(color: Colors.teal),
-                    child: Text(
-                      AppLocalizations.of(context)!.translate('NEW INSPECTION'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    onTap: (startLoading, stopLoading, btnState) async {
-                      bool isNavigated = false;
-
-                      Alert(
-                        context: context,
-                        title: "Scan QR Code",
-                        content: SizedBox(
-                          height: 400,
-                          width: 300,
-                          child: MobileScanner(
-                            controller:
-                                controller, // Pass the controller to the MobileScanner
-                            onDetect: (BarcodeCapture barcodeCapture) async {
-                              if (isNavigated) return;
-                              isNavigated = true;
-
-                              final String? code =
-                                  barcodeCapture.barcodes.first.rawValue;
-                              print('Raw QR Code Data: $code');
-
-                              if (code != null && code.trim().startsWith('{')) {
-                                try {
-                                  final decodedData = json.decode(code);
-
-                                  if (decodedData is Map) {
-                                    final mode = Provider.of<AppModeProvider>(
-                                        context,
-                                        listen: false);
-                                    final reportId =
-                                        decodedData["report_id"]?.toString();
-                                    Map<String, dynamic>? prefetchedData;
-
-                                    if (mode.isOfflineMode) {
-                                      if (reportId == null ||
-                                          reportId.isEmpty) {
-                                        Navigator.pop(context);
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                              content: Text(
-                                                  'Invalid QR code data.')),
-                                        );
-                                        return;
-                                      }
-
-                                      prefetchedData = await EquipmentRepository
-                                          .instance
-                                          .lookupByReportId(reportId);
-
-                                      if (!mounted) return;
-
-                                      if (prefetchedData == null) {
-                                        Navigator.pop(context);
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                              content: Text(
-                                                  'This equipment is not available in offline data.')),
-                                        );
-                                        return;
-                                      }
-                                    }
-
-                                    Widget screen = NewInspection(
-                                      data: decodedData,
-                                      id: widget.id,
-                                      name: widget.name,
-                                      branch: widget.branch,
-                                      company: widget.company,
-                                      email: widget.email,
-                                      image: widget.image,
-                                      contact: widget.contact,
-                                      isOfflineMode: mode.isOfflineMode,
-                                      prefetchedEquipmentData: prefetchedData,
-                                    );
-
-                                    if (!mode.isOfflineMode)
-                                      screen = NetworkWrapper(child: screen);
-
-                                    Navigator.pop(context);
-                                    Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                            builder: (context) => screen));
-                                  } else {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content:
-                                            Text('Unexpected QR code format.'),
-                                        duration: Duration(seconds: 3),
-                                      ),
-                                    );
-                                  }
-                                } catch (e) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                          'Failed to decode QR code data.'),
-                                      duration: Duration(seconds: 3),
-                                    ),
-                                  );
-                                }
-                              } else {
-                                print("Invalid QR code format.");
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Ensure QR code is scanned under optimal conditions.',
-                                    ),
-                                    duration: Duration(seconds: 5),
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                        ),
-                        buttons: [
-                          DialogButton(
-                            onPressed: () => Navigator.pop(context),
-                            color: Colors.red,
-                            child: const Text(
-                              "Cancel",
-                              style:
-                                  TextStyle(color: Colors.white, fontSize: 18),
-                            ),
-                          ),
-                        ],
-                      ).show();
-                    },
-                  ),
-                ),
-
-                // ─── EQUIPMENT INFO ───────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: ArgonButton(
-                    width: MediaQuery.of(context).size.width,
-                    height: 50,
-                    borderRadius: 8.0,
-                    elevation: 10,
-                    color: Colors.black,
-                    borderSide: const BorderSide(color: Colors.teal),
-                    child: Text(
-                      AppLocalizations.of(context)!.translate('EQUIPMENT INFO'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    onTap: (startLoading, stopLoading, btnState) async {
-                      Alert(
-                        context: context,
-                        title: "Scan QR Code",
-                        content: SizedBox(
-                          height: 400,
-                          width: 300,
-                          child: MobileScanner(
-                            controller:
-                                controller, // Pass the controller to the MobileScanner
-                            onDetect: (BarcodeCapture barcodeCapture) {
-                              final String? code =
-                                  barcodeCapture.barcodes.first.rawValue;
-                              print('Raw QR Code Data: $code');
-
-                              if (code != null && code.trim().startsWith('{')) {
-                                try {
-                                  final decodedData = json.decode(code);
-
-                                  if (decodedData is Map) {
-                                    Navigator.pop(context);
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => NetworkWrapper(
-                                          child: EquipementInfo(
-                                            data: decodedData,
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  } else {
-                                    _showError(
-                                        context, 'Unexpected QR code format.');
-                                  }
-                                } catch (e) {
-                                  _showError(context,
-                                      'Failed to decode QR code data.');
-                                }
-                              } else {
-                                _showError(context, 'Invalid QR code format.');
-                              }
-                            },
-                          ),
-                        ),
-                        buttons: [
-                          DialogButton(
-                            onPressed: () => Navigator.pop(context),
-                            color: Colors.red,
-                            child: const Text(
-                              "Cancel",
-                              style:
-                                  TextStyle(color: Colors.white, fontSize: 18),
-                            ),
-                          ),
-                        ],
-                      ).show();
-                    },
-                  ),
-                ),
-
-                // ─── COMPLAINTS ───────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: ArgonButton(
-                    width: MediaQuery.of(context).size.width,
-                    height: 50,
-                    borderRadius: 8.0,
-                    elevation: 10,
-                    color: Colors.black,
-                    borderSide: const BorderSide(color: Colors.teal),
-                    child: Text(
-                      AppLocalizations.of(context)!.translate('COMPLAINTS'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    onTap: (startLoading, stopLoading, btnState) async {
-                      bool isNavigated = false;
-
-                      Alert(
-                        context: context,
-                        title: "Scan QR Code",
-                        content: SizedBox(
-                          height: 400,
-                          width: 300,
-                          child: MobileScanner(
-                            controller: controller,
-                            onDetect: (BarcodeCapture barcodeCapture) {
-                              if (isNavigated) return;
-                              isNavigated = true;
-
-                              final String? code =
-                                  barcodeCapture.barcodes.first.rawValue;
-
-                              if (code != null && code.trim().startsWith('{')) {
-                                try {
-                                  final decodedData = json.decode(code);
-
-                                  if (decodedData is Map) {
-                                    Navigator.pop(context);
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => NetworkWrapper(
-                                          child: ComplaintsScreen(
-                                            data: decodedData,
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  } else {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content:
-                                            Text('Unexpected QR code format.'),
-                                        duration: Duration(seconds: 3),
-                                      ),
-                                    );
-                                  }
-                                } catch (e) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                          'Failed to decode QR code data.'),
-                                      duration: Duration(seconds: 3),
-                                    ),
-                                  );
-                                }
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Ensure QR code is scanned under optimal conditions.',
-                                    ),
-                                    duration: Duration(seconds: 5),
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                        ),
-                        buttons: [
-                          DialogButton(
-                            onPressed: () => Navigator.pop(context),
-                            color: Colors.red,
-                            child: const Text(
-                              "Cancel",
-                              style:
-                                  TextStyle(color: Colors.white, fontSize: 18),
-                            ),
-                          ),
-                        ],
-                      ).show();
-                    },
-                  ),
-                ),
-
-                // ─── UPCOMING INSPECTION ──────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: ArgonButton(
-                    width: MediaQuery.of(context).size.width,
-                    height: 50,
-                    borderRadius: 8.0,
-                    elevation: 10,
-                    color: Colors.black,
-                    borderSide: const BorderSide(color: Colors.teal),
-                    child: Text(
-                      AppLocalizations.of(context)!
-                          .translate('UPCOMING INSPECTION'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    onTap: (startLoading, stopLoading, btnState) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => NetworkWrapper(
-                            child: ChangeNotifierProvider(
-                              create: (_) => UpcomingInspectionProvider(),
-                              child: UpcomingInspectionScreen(
-                                userId: widget.id,
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 26, bottom: 6),
+                child: Image.asset("assets/icon/logo.png",
+                    width: 100, height: 100),
+              ),
+              _buildCustomTabBar(),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 15),
+                      child: Column(
+                        children: [
+                          // ─── NEW INSPECTION ───────────────────────────────────
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: ArgonButton(
+                              width: MediaQuery.of(context).size.width,
+                              height: 50,
+                              borderRadius: 8.0,
+                              elevation: 10,
+                              color: Colors.black,
+                              borderSide: const BorderSide(color: Colors.teal),
+                              child: Text(
+                                AppLocalizations.of(context)!
+                                    .translate('NEW INSPECTION'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
+                              onTap:
+                                  (startLoading, stopLoading, btnState) async {
+                                bool isNavigated = false;
+
+                                Alert(
+                                  context: context,
+                                  title: "Scan QR Code",
+                                  content: SizedBox(
+                                    height: 400,
+                                    width: 300,
+                                    child: MobileScanner(
+                                      controller:
+                                          controller, // Pass the controller to the MobileScanner
+                                      onDetect: (BarcodeCapture
+                                          barcodeCapture) async {
+                                        if (isNavigated) return;
+                                        isNavigated = true;
+
+                                        final String? code = barcodeCapture
+                                            .barcodes.first.rawValue;
+                                        print('Raw QR Code Data: $code');
+
+                                        if (code != null &&
+                                            code.trim().startsWith('{')) {
+                                          try {
+                                            final decodedData =
+                                                json.decode(code);
+
+                                            if (decodedData is Map) {
+                                              final mode =
+                                                  Provider.of<AppModeProvider>(
+                                                      context,
+                                                      listen: false);
+                                              final reportId =
+                                                  decodedData["report_id"]
+                                                      ?.toString();
+                                              Map<String, dynamic>?
+                                                  prefetchedData;
+
+                                              if (mode.isOfflineMode) {
+                                                if (reportId == null ||
+                                                    reportId.isEmpty) {
+                                                  Navigator.pop(context);
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    const SnackBar(
+                                                        content: Text(
+                                                            'Invalid QR code data.')),
+                                                  );
+                                                  return;
+                                                }
+
+                                                prefetchedData =
+                                                    await EquipmentRepository
+                                                        .instance
+                                                        .lookupByReportId(
+                                                            reportId);
+
+                                                if (!mounted) return;
+
+                                                if (prefetchedData == null) {
+                                                  Navigator.pop(context);
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    const SnackBar(
+                                                        content: Text(
+                                                            'This equipment is not available in offline data.')),
+                                                  );
+                                                  return;
+                                                }
+                                              }
+
+                                              Widget screen = NewInspection(
+                                                data: decodedData,
+                                                id: widget.id,
+                                                name: widget.name,
+                                                branch: widget.branch,
+                                                company: widget.company,
+                                                email: widget.email,
+                                                image: widget.image,
+                                                contact: widget.contact,
+                                                isOfflineMode:
+                                                    mode.isOfflineMode,
+                                                prefetchedEquipmentData:
+                                                    prefetchedData,
+                                              );
+
+                                              if (!mode.isOfflineMode)
+                                                screen = NetworkWrapper(
+                                                    child: screen);
+
+                                              Navigator.pop(context);
+                                              Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                      builder: (context) =>
+                                                          screen));
+                                            } else {
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                      'Unexpected QR code format.'),
+                                                  duration:
+                                                      Duration(seconds: 3),
+                                                ),
+                                              );
+                                            }
+                                          } catch (e) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                    'Failed to decode QR code data.'),
+                                                duration: Duration(seconds: 3),
+                                              ),
+                                            );
+                                          }
+                                        } else {
+                                          print("Invalid QR code format.");
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Ensure QR code is scanned under optimal conditions.',
+                                              ),
+                                              duration: Duration(seconds: 5),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  buttons: [
+                                    DialogButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      color: Colors.red,
+                                      child: const Text(
+                                        "Cancel",
+                                        style: TextStyle(
+                                            color: Colors.white, fontSize: 18),
+                                      ),
+                                    ),
+                                  ],
+                                ).show();
+                              },
                             ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
 
-                // ─── MY RECORD ────────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: ArgonButton(
-                    width: MediaQuery.of(context).size.width,
-                    height: 50,
-                    borderRadius: 8.0,
-                    elevation: 10,
-                    color: Colors.black,
-                    borderSide: const BorderSide(color: Colors.teal),
-                    child: Text(
-                      AppLocalizations.of(context)!.translate('MY RECORD'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    onTap: (startLoading, stopLoading, btnState) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              NetworkWrapper(child: MyRecords(id: widget.id)),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+                          // ─── EQUIPMENT INFO ───────────────────────────────────
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: ArgonButton(
+                              width: MediaQuery.of(context).size.width,
+                              height: 50,
+                              borderRadius: 8.0,
+                              elevation: 10,
+                              color: Colors.black,
+                              borderSide: const BorderSide(color: Colors.teal),
+                              child: Text(
+                                AppLocalizations.of(context)!
+                                    .translate('EQUIPMENT INFO'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              onTap:
+                                  (startLoading, stopLoading, btnState) async {
+                                Alert(
+                                  context: context,
+                                  title: "Scan QR Code",
+                                  content: SizedBox(
+                                    height: 400,
+                                    width: 300,
+                                    child: MobileScanner(
+                                      controller:
+                                          controller, // Pass the controller to the MobileScanner
+                                      onDetect:
+                                          (BarcodeCapture barcodeCapture) {
+                                        final String? code = barcodeCapture
+                                            .barcodes.first.rawValue;
+                                        print('Raw QR Code Data: $code');
 
-                // ─── MY ACCOUNT ───────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: ArgonButton(
-                    width: MediaQuery.of(context).size.width,
-                    height: 50,
-                    borderRadius: 8.0,
-                    elevation: 10,
-                    color: Colors.black,
-                    borderSide: const BorderSide(color: Colors.teal),
-                    child: Text(
-                      AppLocalizations.of(context)!.translate('MY ACCOUNT'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    onTap: (startLoading, stopLoading, btnState) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => NetworkWrapper(
-                            child: Profile(
-                              id: widget.id,
-                              name: widget.name,
-                              company: widget.company,
-                              branch: widget.branch,
-                              email: widget.email,
-                              // password: widget.password,
-                              image: widget.image,
-                              contact: widget.contact,
+                                        if (code != null &&
+                                            code.trim().startsWith('{')) {
+                                          try {
+                                            final decodedData =
+                                                json.decode(code);
+
+                                            if (decodedData is Map) {
+                                              Navigator.pop(context);
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      NetworkWrapper(
+                                                    child: EquipementInfo(
+                                                      data: decodedData,
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            } else {
+                                              _showError(context,
+                                                  'Unexpected QR code format.');
+                                            }
+                                          } catch (e) {
+                                            _showError(context,
+                                                'Failed to decode QR code data.');
+                                          }
+                                        } else {
+                                          _showError(context,
+                                              'Invalid QR code format.');
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  buttons: [
+                                    DialogButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      color: Colors.red,
+                                      child: const Text(
+                                        "Cancel",
+                                        style: TextStyle(
+                                            color: Colors.white, fontSize: 18),
+                                      ),
+                                    ),
+                                  ],
+                                ).show();
+                              },
                             ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
 
-                // ─── LOGOUT ───────────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: ArgonButton(
-                    width: MediaQuery.of(context).size.width,
-                    height: 50,
-                    borderRadius: 8.0,
-                    elevation: 10,
-                    color: Colors.black,
-                    borderSide: const BorderSide(color: Colors.teal),
-                    child: Text(
-                      AppLocalizations.of(context)!.translate('LOGOUT'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
+                          // ─── COMPLAINTS ───────────────────────────────────
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: ArgonButton(
+                              width: MediaQuery.of(context).size.width,
+                              height: 50,
+                              borderRadius: 8.0,
+                              elevation: 10,
+                              color: Colors.black,
+                              borderSide: const BorderSide(color: Colors.teal),
+                              child: Text(
+                                AppLocalizations.of(context)!
+                                    .translate('COMPLAINTS'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              onTap:
+                                  (startLoading, stopLoading, btnState) async {
+                                bool isNavigated = false;
+
+                                Alert(
+                                  context: context,
+                                  title: "Scan QR Code",
+                                  content: SizedBox(
+                                    height: 400,
+                                    width: 300,
+                                    child: MobileScanner(
+                                      controller: controller,
+                                      onDetect:
+                                          (BarcodeCapture barcodeCapture) {
+                                        if (isNavigated) return;
+                                        isNavigated = true;
+
+                                        final String? code = barcodeCapture
+                                            .barcodes.first.rawValue;
+
+                                        if (code != null &&
+                                            code.trim().startsWith('{')) {
+                                          try {
+                                            final decodedData =
+                                                json.decode(code);
+
+                                            if (decodedData is Map) {
+                                              Navigator.pop(context);
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      NetworkWrapper(
+                                                    child: ComplaintsScreen(
+                                                      data: decodedData,
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            } else {
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                      'Unexpected QR code format.'),
+                                                  duration:
+                                                      Duration(seconds: 3),
+                                                ),
+                                              );
+                                            }
+                                          } catch (e) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                    'Failed to decode QR code data.'),
+                                                duration: Duration(seconds: 3),
+                                              ),
+                                            );
+                                          }
+                                        } else {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Ensure QR code is scanned under optimal conditions.',
+                                              ),
+                                              duration: Duration(seconds: 5),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  buttons: [
+                                    DialogButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      color: Colors.red,
+                                      child: const Text(
+                                        "Cancel",
+                                        style: TextStyle(
+                                            color: Colors.white, fontSize: 18),
+                                      ),
+                                    ),
+                                  ],
+                                ).show();
+                              },
+                            ),
+                          ),
+
+                          // ─── UPCOMING INSPECTION ──────────────────────────────
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: ArgonButton(
+                              width: MediaQuery.of(context).size.width,
+                              height: 50,
+                              borderRadius: 8.0,
+                              elevation: 10,
+                              color: Colors.black,
+                              borderSide: const BorderSide(color: Colors.teal),
+                              child: Text(
+                                AppLocalizations.of(context)!
+                                    .translate('UPCOMING INSPECTION'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              onTap: (startLoading, stopLoading, btnState) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => NetworkWrapper(
+                                      child: ChangeNotifierProvider(
+                                        create: (_) =>
+                                            UpcomingInspectionProvider(),
+                                        child: UpcomingInspectionScreen(
+                                          userId: widget.id,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+
+                          // ─── MY RECORD ────────────────────────────────────────
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: ArgonButton(
+                              width: MediaQuery.of(context).size.width,
+                              height: 50,
+                              borderRadius: 8.0,
+                              elevation: 10,
+                              color: Colors.black,
+                              borderSide: const BorderSide(color: Colors.teal),
+                              child: Text(
+                                AppLocalizations.of(context)!
+                                    .translate('MY RECORD'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              onTap: (startLoading, stopLoading, btnState) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => NetworkWrapper(
+                                        child: MyRecords(id: widget.id)),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+
+                          // ─── MY ACCOUNT ───────────────────────────────────────
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: ArgonButton(
+                              width: MediaQuery.of(context).size.width,
+                              height: 50,
+                              borderRadius: 8.0,
+                              elevation: 10,
+                              color: Colors.black,
+                              borderSide: const BorderSide(color: Colors.teal),
+                              child: Text(
+                                AppLocalizations.of(context)!
+                                    .translate('MY ACCOUNT'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              onTap: (startLoading, stopLoading, btnState) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => NetworkWrapper(
+                                      child: Profile(
+                                        id: widget.id,
+                                        name: widget.name,
+                                        company: widget.company,
+                                        branch: widget.branch,
+                                        email: widget.email,
+                                        // password: widget.password,
+                                        image: widget.image,
+                                        contact: widget.contact,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+
+                          // ─── LOGOUT ───────────────────────────────────────────
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: ArgonButton(
+                              width: MediaQuery.of(context).size.width,
+                              height: 50,
+                              borderRadius: 8.0,
+                              elevation: 10,
+                              color: Colors.black,
+                              borderSide: const BorderSide(color: Colors.teal),
+                              child: Text(
+                                AppLocalizations.of(context)!
+                                    .translate('LOGOUT'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              onTap:
+                                  (startLoading, stopLoading, btnState) async {
+                                startLoading();
+                                await AuthService.logout();
+                                stopLoading();
+                                if (context.mounted) {
+                                  Navigator.pushAndRemoveUntil(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => const LoginScreen()),
+                                    (route) => false,
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    onTap: (startLoading, stopLoading, btnState) async {
-                      startLoading();
-                      await AuthService.logout();
-                      stopLoading();
-                      if (context.mounted) {
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const LoginScreen()),
-                          (route) => false,
-                        );
-                      }
-                    },
-                  ),
+                    SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: _buildComplianceComingSoon(),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           Positioned(
             top: 8,
@@ -1067,9 +1257,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          isOffline
-                              ? 'Offline'
-                              : 'Online',
+                          isOffline ? 'Offline' : 'Online',
                           style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
@@ -1100,6 +1288,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _subscription?.cancel();
     controller.dispose();
     _audioPlayer.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 }

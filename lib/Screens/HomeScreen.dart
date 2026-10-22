@@ -8,6 +8,7 @@ import 'package:inspecto_shield_partner/Providers/upcoming_inspection_provider.d
 import 'package:inspecto_shield_partner/Screens/Profile.dart';
 import 'package:inspecto_shield_partner/Screens/area_location_dialog.dart';
 import 'package:inspecto_shield_partner/Screens/complaints_screen.dart';
+import 'package:inspecto_shield_partner/Screens/compliance_tab.dart';
 import 'package:inspecto_shield_partner/Screens/equipment_info.dart';
 import 'package:inspecto_shield_partner/Screens/internet_error_popup.dart';
 import 'package:inspecto_shield_partner/Screens/login.dart';
@@ -648,39 +649,10 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Widget _buildComplianceComingSoon() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 80),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xff0DC5B9).withOpacity(0.1),
-            ),
-            child: const Icon(
-              Icons.assignment_turned_in_rounded,
-              size: 44,
-              color: Color(0xff0DC5B9),
-            ),
-          ),
-          const SizedBox(height: 18),
-          const Text(
-            'Coming Soon',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Compliance is on its way.',
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-          ),
-        ],
-      ),
-    );
+  Widget _buildComplianceTab() {
+    return const ComplianceTab();
   }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1216,7 +1188,7 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                     SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
-                      child: _buildComplianceComingSoon(),
+                      child: _buildComplianceTab(),
                     ),
                   ],
                 ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:inspecto_shield_partner/models/upcoming_inspection_model.dart';
-import '../services/upcoming_inspection_service.dart';
+import 'package:inspecto_shield_partner/services/upcoming_inspection_service.dart';
 
 enum UpcomingInspectionState { initial, loading, loaded, empty, error }
 

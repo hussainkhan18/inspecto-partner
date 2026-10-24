@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:inspecto_shield_partner/Providers/app_mode_provider.dart';
+import 'package:inspecto_shield_partner/Providers/gemba_walk_provider.dart';
 import 'package:inspecto_shield_partner/Screens/offline_mode_wrapper.dart';
 import 'package:provider/provider.dart';
 
@@ -46,6 +47,9 @@ void main() async {
         ),
         ChangeNotifierProvider<EditProfileProvider>(
           create: (_) => EditProfileProvider(),
+        ),
+        ChangeNotifierProvider<GembaWalkProvider>(
+          create: (_) => GembaWalkProvider(),
         ),
       ],
       child: const MyApp(),

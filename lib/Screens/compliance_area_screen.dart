@@ -3,13 +3,17 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:inspecto_shield_partner/Providers/app_mode_provider.dart';
 import 'package:inspecto_shield_partner/Screens/compliance_inspection_screen.dart';
 import 'package:inspecto_shield_partner/Screens/widgets/compliance_image.dart';
 import 'package:inspecto_shield_partner/Screens/widgets/qr_scanner_view.dart';
 import 'package:inspecto_shield_partner/models/compliance_models.dart';
+import 'package:inspecto_shield_partner/repositories/compliance_repository.dart';
 import 'package:inspecto_shield_partner/services/area_photo_stamper.dart';
 import 'package:inspecto_shield_partner/services/compliance_service.dart';
+import 'package:inspecto_shield_partner/services/sound_service.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:provider/provider.dart';
 import 'package:rflutter_alert/rflutter_alert.dart';
 
 class ComplianceAreaScreen extends StatefulWidget {
@@ -136,11 +140,41 @@ class _ComplianceAreaScreenState extends State<ComplianceAreaScreen> {
     setState(() => _isScanning = true);
     _showLoadingDialog();
 
+    final isOffline = context.read<AppModeProvider>().isOfflineMode;
+
     try {
-      final result = await ComplianceService.scanEquipment(
-        scannedCode,
-        areaId: widget.initialData.area.id,
-      );
+      ComplianceScanEquipmentResult result;
+
+      if (isOffline) {
+        final row = await ComplianceRepository.instance.lookupByQr(scannedCode);
+
+        if (row == null) {
+          if (!mounted) return;
+          Navigator.of(context, rootNavigator: true).pop();
+          _showEquipmentMismatchAlert(expectedEquipment.name);
+          return;
+        }
+
+        final checklistRaw = (row['checklist'] as List<dynamic>?) ?? const [];
+        final checklist = checklistRaw
+            .whereType<Map>()
+            .map(
+              (e) => ComplianceChecklistItem.fromJson(
+                Map<String, dynamic>.from(e),
+              ),
+            )
+            .toList();
+
+        result = ComplianceScanEquipmentResult(
+          equipment: ComplianceEquipment.fromCachedRow(row),
+          checklist: checklist,
+        );
+      } else {
+        result = await ComplianceService.scanEquipment(
+          scannedCode,
+          areaId: widget.initialData.area.id,
+        );
+      }
 
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
@@ -148,6 +182,8 @@ class _ComplianceAreaScreenState extends State<ComplianceAreaScreen> {
         _showEquipmentMismatchAlert(expectedEquipment.name);
         return;
       }
+
+      SoundService.playBeep();
 
       final submittedStatus = await Navigator.push<String>(
         context,
@@ -530,13 +566,14 @@ class _ComplianceAreaScreenState extends State<ComplianceAreaScreen> {
     );
   }
 
-List<Widget> _buildVisitSections() {
-  return [
-    _buildStaffPhotoCard(),
-    _buildOperatorsCard(),
-    ..._buildSubmitSection(),
-  ];
-}
+  List<Widget> _buildVisitSections() {
+    final isOffline = context.read<AppModeProvider>().isOfflineMode;
+    return [
+      if (!isOffline) _buildStaffPhotoCard(),
+      _buildOperatorsCard(),
+      if (!isOffline) ..._buildSubmitSection(),
+    ];
+  }
 
   void _toggleCriterion(int employeeId, int criterionId) {
     setState(() {

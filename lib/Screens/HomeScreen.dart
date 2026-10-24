@@ -15,9 +15,11 @@ import 'package:inspecto_shield_partner/Screens/login.dart';
 import 'package:inspecto_shield_partner/Screens/my_record.dart';
 import 'package:inspecto_shield_partner/Screens/new_inspection.dart';
 import 'package:inspecto_shield_partner/Screens/upcoming_inspection_screen.dart';
+import 'package:inspecto_shield_partner/repositories/compliance_repository.dart';
 import 'package:inspecto_shield_partner/repositories/equipment_repository.dart';
 import 'package:inspecto_shield_partner/repositories/inspection_repository.dart';
 import 'package:inspecto_shield_partner/services/auth_service.dart';
+import 'package:inspecto_shield_partner/services/compliance_sync_service.dart';
 import 'package:inspecto_shield_partner/services/equipment_service.dart';
 import 'package:inspecto_shield_partner/services/home_service.dart';
 import 'package:inspecto_shield_partner/services/notification_service.dart';
@@ -403,30 +405,36 @@ class _HomeScreenState extends State<HomeScreen>
         locationName: selection['locationName'],
       );
 
-      final equipment =
-          await OfflineEquipmentService.fetchEquipmentForOfflineCache(
-        areaId: selection['areaId']!,
-        locationId: selection['locationId'],
-      );
-
-      if (equipment.isEmpty) {
-        mode.failFetch('No equipment found for this area.');
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No equipment found for this area.')),
-          );
-        }
-        return;
-      }
-
       try {
+        final result =
+            await OfflineEquipmentService.fetchEquipmentForOfflineCache(
+          areaId: selection['areaId']!,
+          locationId: selection['locationId'],
+        );
+
+        if (result.equipment.isEmpty && result.complianceEquipment.isEmpty) {
+          mode.failFetch('No equipment found for this area.');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text('No equipment found for this area.')),
+            );
+          }
+          return;
+        }
+
         await EquipmentRepository.instance.refreshCache(
-          equipment,
+          result.equipment,
           onProgress: (done, total) {
             if (total > 0) mode.updateFetchProgress(done / total);
           },
         );
+
+        await ComplianceRepository.instance
+            .refreshCache(result.complianceEquipment);
+
         await mode.completeFetchSuccess();
+
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('You are now on Offline Mode')),
@@ -459,8 +467,10 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     final pending = await repository.getPendingInspections();
+    final pendingComplianceCount =
+        await ComplianceRepository.instance.getPendingCount();
 
-    if (pending.isEmpty) {
+    if (pending.isEmpty && pendingComplianceCount == 0) {
       await mode.completeSyncSuccess();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -470,7 +480,7 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
-    mode.startSyncing(pending.length);
+    mode.startSyncing(pending.length + pendingComplianceCount);
 
     int succeeded = 0;
     int stillPending = 0;
@@ -536,14 +546,28 @@ class _HomeScreenState extends State<HomeScreen>
       mode.updateSyncProgress(succeeded + stillPending);
     }
 
-    if (stillPending > 0) {
-      await mode
-          .completeSyncPartial('$succeeded synced, $stillPending will retry.');
+    int complianceSynced = 0;
+    int complianceFailed = 0;
+    if (pendingComplianceCount > 0) {
+      final complianceResult = await ComplianceSyncService.syncPending();
+      complianceSynced = complianceResult.synced;
+      complianceFailed = complianceResult.failed;
+      await mode.refreshPendingComplianceCount();
+      mode.updateSyncProgress(
+          succeeded + stillPending + complianceSynced + complianceFailed);
+    }
+
+    final totalStillPending = stillPending + complianceFailed;
+    final totalSucceeded = succeeded + complianceSynced;
+
+    if (totalStillPending > 0) {
+      await mode.completeSyncPartial(
+          '$totalSucceeded synced, $totalStillPending will retry.');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
-                  'Synced $succeeded items. $stillPending pending retry.')),
+                  'Synced $totalSucceeded items. $totalStillPending pending retry.')),
         );
       }
     } else {
@@ -552,7 +576,7 @@ class _HomeScreenState extends State<HomeScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
-                  'All $succeeded items synced! You are back to Online Mode.')),
+                  'All $totalSucceeded items synced! You are back to Online Mode.')),
         );
       }
     }
@@ -652,7 +676,7 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _buildComplianceTab() {
     return const ComplianceTab();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

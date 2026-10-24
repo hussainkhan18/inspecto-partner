@@ -1,54 +1,53 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:inspecto_shield_partner/repositories/compliance_repository.dart';
 import 'package:inspecto_shield_partner/repositories/inspection_repository.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-enum AppModeStatus { online, fetching, offline, syncing }
-enum SyncPhase { idle, fetchingEquipment, syncing }
+enum SyncPhase {
+  idle,
+  fetchingEquipment,
+  fetchingCompliance,
+  syncingInspections
+}
 
 class AppModeProvider extends ChangeNotifier {
-  static const _kOffline = 'partner_offline_mode';
-  static const _kAreaName = 'partner_offline_area_name';
-  static const _kLocationName = 'partner_offline_location_name';
+  final InspectionRepository _inspectionRepository;
 
-  AppModeStatus _status = AppModeStatus.online;
-  double _fetchProgress = 0;
+  AppModeProvider({InspectionRepository? inspectionRepository})
+      : _inspectionRepository =
+            inspectionRepository ?? InspectionRepository.instance;
+
+  bool _isOfflineMode = false;
+  SyncPhase _phase = SyncPhase.idle;
+
+  double _fetchProgress = 0.0;
+
   int _syncTotal = 0;
-  int _syncDone = 0;
-  int _pendingCount = 0;
-  String? _areaId;
-  String? _areaName;
-  String? _locationId;
-  String? _locationName;
-  String? _message;
+  int _syncCompleted = 0;
 
-  AppModeStatus get status => _status;
-  bool get isOfflineMode => _status == AppModeStatus.offline;
-  bool get isFetching => _status == AppModeStatus.fetching;
-  bool get isSyncing => _status == AppModeStatus.syncing;
-  bool get isBusy => isFetching || isSyncing;
+  // Selected area/location
+  String? selectedAreaId;
+  String? selectedAreaName;
+  String? selectedLocationId;
+  String? selectedLocationName;
+
+  int _pendingCount = 0;
+  String? _lastError;
+
+  double _complianceFetchProgress = 0.0;
+  int _pendingComplianceCount = 0;
+
+  // Getters
+
+  bool get isOfflineMode => _isOfflineMode;
+  SyncPhase get phase => _phase;
+  bool get isBusy => _phase != SyncPhase.idle;
   double get fetchProgress => _fetchProgress;
   int get syncTotal => _syncTotal;
-  int get syncDone => _syncDone;
+  int get syncCompleted => _syncCompleted;
   int get pendingCount => _pendingCount;
-  String? get areaName => _areaName;
-  String? get locationName => _locationName;
-  String? get message => _message;
-    SyncPhase get phase => isFetching
-      ? SyncPhase.fetchingEquipment
-      : (isSyncing ? SyncPhase.syncing : SyncPhase.idle);
-  int get syncCompleted => _syncDone;
-  int get pendingComplianceCount => 0; 
-
-  Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_kOffline) ?? false) {
-      _status = AppModeStatus.offline;
-      _areaName = prefs.getString(_kAreaName);
-      _locationName = prefs.getString(_kLocationName);
-    }
-    await refreshPendingCount();
-    notifyListeners();
-  }
+  String? get lastError => _lastError;
+  double get complianceFetchProgress => _complianceFetchProgress;
+  int get pendingComplianceCount => _pendingComplianceCount;
 
   void startFetchingEquipment({
     required String areaId,
@@ -56,69 +55,95 @@ class AppModeProvider extends ChangeNotifier {
     String? locationId,
     String? locationName,
   }) {
-    _areaId = areaId;
-    _areaName = areaName;
-    _locationId = locationId;
-    _locationName = locationName;
-    _fetchProgress = 0;
-    _message = null;
-    _status = AppModeStatus.fetching;
+    selectedAreaId = areaId;
+    selectedAreaName = areaName;
+    selectedLocationId = locationId;
+    selectedLocationName = locationName;
+    _phase = SyncPhase.fetchingEquipment;
+    _fetchProgress = 0.0;
+    _lastError = null;
     notifyListeners();
   }
 
-  void updateFetchProgress(double p) {
-    _fetchProgress = p.clamp(0.0, 1.0);
-    notifyListeners();
-  }
-
-  void failFetch(String msg) {
-    _message = msg;
-    _status = AppModeStatus.online;
+  void updateFetchProgress(double value) {
+    _fetchProgress = value.clamp(0.0, 1.0);
     notifyListeners();
   }
 
   Future<void> completeFetchSuccess() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kOffline, true);
-    await prefs.setString(_kAreaName, _areaName ?? '');
-    await prefs.setString(_kLocationName, _locationName ?? '');
-    _status = AppModeStatus.offline;
+    _phase = SyncPhase.idle;
+    _isOfflineMode = true;
+    _fetchProgress = 1.0;
+    _complianceFetchProgress = 1.0;
     await refreshPendingCount();
+    await refreshPendingComplianceCount();
+    notifyListeners();
+  }
+
+  void failFetch(String error) {
+    _phase = SyncPhase.idle;
+    _isOfflineMode = false;
+    _lastError = error;
     notifyListeners();
   }
 
   void startSyncing(int total) {
+    _phase = SyncPhase.syncingInspections;
     _syncTotal = total;
-    _syncDone = 0;
-    _message = null;
-    _status = AppModeStatus.syncing;
+    _syncCompleted = 0;
+    _lastError = null;
     notifyListeners();
   }
 
-  void updateSyncProgress(int done) {
-    _syncDone = done;
+  void updateSyncProgress(int completed) {
+    _syncCompleted = completed;
     notifyListeners();
   }
 
-  Future<void> completeSyncSuccess() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kOffline);
-    await prefs.remove(_kAreaName);
-    await prefs.remove(_kLocationName);
-    _status = AppModeStatus.online;
-    _pendingCount = 0;
-    notifyListeners();
-  }
-
-  Future<void> completeSyncPartial(String msg) async {
-    _message = msg;
-    _status = AppModeStatus.offline;
+Future<void> completeSyncSuccess() async {
+    _phase = SyncPhase.idle;
+    _isOfflineMode = false;
+    selectedAreaId = null;
+    selectedAreaName = null;
+    selectedLocationId = null;
+    selectedLocationName = null;
     await refreshPendingCount();
+    await refreshPendingComplianceCount();
+    notifyListeners();
+  }
+
+  Future<void> completeSyncPartial(String error) async {
+    _phase = SyncPhase.idle;
+    _lastError = error;
+    await refreshPendingCount();
+    await refreshPendingComplianceCount();
     notifyListeners();
   }
 
   Future<void> refreshPendingCount() async {
-    _pendingCount = await InspectionRepository.instance.getPendingCount();
+    _pendingCount = await _inspectionRepository.getPendingCount();
+    notifyListeners();
+  }
+
+  void clearError() {
+    _lastError = null;
+    notifyListeners();
+  }
+
+  void startFetchingCompliance() {
+    _phase = SyncPhase.fetchingCompliance;
+    _complianceFetchProgress = 0.0;
+    notifyListeners();
+  }
+
+  void updateComplianceFetchProgress(double value) {
+    _complianceFetchProgress = value.clamp(0.0, 1.0);
+    notifyListeners();
+  }
+
+  Future<void> refreshPendingComplianceCount() async {
+    _pendingComplianceCount =
+        await ComplianceRepository.instance.getPendingCount();
     notifyListeners();
   }
 }

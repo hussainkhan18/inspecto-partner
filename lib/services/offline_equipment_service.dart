@@ -4,6 +4,19 @@ import 'package:inspecto_shield_partner/models/offline_data_model.dart';
 import 'package:http/http.dart' as http;
 import 'package:inspecto_shield_partner/services/secure_storage_service.dart';
 
+class OfflineFetchResult {
+  final List<Map<String, dynamic>> equipment;
+  final List<Map<String, dynamic>> complianceEquipment;
+
+  const OfflineFetchResult({
+    required this.equipment,
+    required this.complianceEquipment,
+  });
+
+  static const empty =
+      OfflineFetchResult(equipment: [], complianceEquipment: []);
+}
+
 class OfflineEquipmentService {
   static Future<Map<String, String>> _headers() async {
     final token = await SecureStorageService.getToken();
@@ -65,7 +78,15 @@ class OfflineEquipmentService {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> fetchEquipmentForOfflineCache({
+     static List<Map<String, dynamic>> _asMapList(dynamic raw) {
+    if (raw is! List) return [];
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  static Future<OfflineFetchResult> fetchEquipmentForOfflineCache({
     required String areaId,
     String? locationId,
   }) async {
@@ -82,19 +103,23 @@ class OfflineEquipmentService {
           )
           .timeout(const Duration(seconds: 30));
 
-      if (response.statusCode == 200) {
-        final jsonResponse = json.decode(response.body);
-        if (jsonResponse['success'] == true && jsonResponse['data'] is List) {
-          return (jsonResponse['data'] as List)
-              .whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList();
-        }
+      if (response.statusCode != 200) return OfflineFetchResult.empty;
+
+      final jsonResponse = json.decode(response.body);
+      if (jsonResponse is! Map || jsonResponse['success'] != true) {
+        return OfflineFetchResult.empty;
       }
-      return [];
+
+      final complianceBlock = jsonResponse['compliance'];
+
+      return OfflineFetchResult(
+        equipment: _asMapList(jsonResponse['data']),
+        complianceEquipment:
+            complianceBlock is Map ? _asMapList(complianceBlock['data']) : [],
+      );
     } catch (e) {
       print('fetchEquipmentForOfflineCache failed: $e');
-      return [];
+      return OfflineFetchResult.empty;
     }
   }
 }

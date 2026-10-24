@@ -47,4 +47,6 @@ class ApiConstants {
   static const String offlineAreas = '$baseUrl/offline/areas';
   static const String offlineLocations = '$baseUrl/offline/locations';
   static const String offlineEquipmentData = '$baseUrl/offline/equipment-data';
+   static const String offlineSyncComplianceInspections =
+      '$baseUrl/offline/sync-compliance-inspections';
 }

@@ -1,11 +1,16 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:inspecto_shield_partner/Providers/app_mode_provider.dart';
 import 'package:inspecto_shield_partner/Screens/widgets/compliance_image.dart';
 import 'package:inspecto_shield_partner/models/compliance_models.dart';
+import 'package:inspecto_shield_partner/repositories/compliance_repository.dart';
+import 'package:inspecto_shield_partner/services/addons_service.dart';
 import 'package:inspecto_shield_partner/services/area_photo_stamper.dart';
 import 'package:inspecto_shield_partner/services/compliance_service.dart';
+import 'package:inspecto_shield_partner/services/offline_image_storage.dart';
 import 'package:lottie/lottie.dart';
+import 'package:provider/provider.dart';
 
 class ComplianceInspectionScreen extends StatefulWidget {
   final ComplianceEquipment equipment;
@@ -108,16 +113,37 @@ class _ComplianceInspectionScreenState
     if (!_validate()) return;
 
     setState(() => _isSubmitting = true);
+    final isOffline = context.read<AppModeProvider>().isOfflineMode;
 
     try {
-      await ComplianceService.submitInspection(
-        equipmentId: widget.equipment.id,
-        areaId: widget.areaId,
-        overallStatus: overallStatus,
-        checklistAnswers: _answers,
-        proofImage: _proofImage!,
-        notes: _notesController.text,
-      );
+      if (isOffline) {
+        final persistedImage =
+            await OfflineImageStorage.persistImage(_proofImage!, 'compliance');
+
+        await ComplianceRepository.instance.saveInspection(
+          equipmentQrCode: widget.equipment.equipmentQrCode ?? '',
+          equipmentId: widget.equipment.id,
+          areaId: widget.areaId,
+          overallStatus: overallStatus,
+          checklist: widget.checklist,
+          answers: _answers,
+          proofImagePath: persistedImage.path,
+          notes: _notesController.text,
+        );
+        await context.read<AppModeProvider>().refreshPendingComplianceCount();
+      } else {
+        await ComplianceService.submitInspection(
+          equipmentId: widget.equipment.id,
+          areaId: widget.areaId,
+          overallStatus: overallStatus,
+          checklistAnswers: _answers,
+          proofImage: _proofImage!,
+          notes: _notesController.text,
+        );
+        if (ComplianceService.lastAddons != null) {
+          await AddonsService.saveAddons(ComplianceService.lastAddons);
+        }
+      }
 
       if (!mounted) return;
       await _showSuccessDialog(overallStatus);
@@ -247,9 +273,13 @@ class _ComplianceInspectionScreenState
                           ),
                         ),
                       )),
+
                   _buildInfoCard(eq),
+
                   _buildChecklistCard(),
+
                   _buildProofImageCard(),
+
                   _buildNotesCard(),
                 ],
               ),

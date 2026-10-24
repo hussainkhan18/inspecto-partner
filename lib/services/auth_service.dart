@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:inspecto_shield_partner/constants/api_constants.dart';
+import 'package:inspecto_shield_partner/services/addons_service.dart';
 import 'package:inspecto_shield_partner/services/secure_storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
@@ -49,6 +50,11 @@ class AuthService {
     await prefs.setString("contact", jsonResponse["user"]["contact_number"]);
     await prefs.setString("company", jsonResponse["user"]["company_name"]);
     await prefs.setString("branch", jsonResponse["user"]["branch_name"]);
+
+    final addons = jsonResponse["addons"];
+    await AddonsService.saveAddons(
+      addons is Map ? Map<String, dynamic>.from(addons) : null,
+    );
   }
 
   // ── PROFILE UPDATE ─────────────────────────────────────────

@@ -7,6 +7,7 @@ import 'package:inspecto_shield_partner/Screens/widgets/qr_scanner_view.dart';
 import 'package:inspecto_shield_partner/models/compliance_models.dart';
 import 'package:inspecto_shield_partner/models/compliance_upcoming_model.dart';
 import 'package:inspecto_shield_partner/services/compliance_service.dart';
+import 'package:inspecto_shield_partner/services/sound_service.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import 'package:rflutter_alert/rflutter_alert.dart';
@@ -151,7 +152,8 @@ class _ComplianceUpcomingScreenState extends State<ComplianceUpcomingScreen> {
     ];
 
     if (showOverdue) {
-      children.add(_sectionHeader('Overdue', _AppColors.red));
+      children
+          .add(_sectionHeader('Overdue', _AppColors.red));
       for (final item in data.overdue) {
         children.add(_InspectionCard(
           item: item,
@@ -162,7 +164,8 @@ class _ComplianceUpcomingScreenState extends State<ComplianceUpcomingScreen> {
 
     if (showUpcoming) {
       data.upcomingByDay.forEach((day, items) {
-        children.add(_sectionHeader(_dayLabel(day), _AppColors.teal));
+        children
+            .add(_sectionHeader(_dayLabel(day), _AppColors.teal));
         for (final item in items) {
           children.add(_InspectionCard(
             item: item,
@@ -439,6 +442,8 @@ class _ComplianceUpcomingScreenState extends State<ComplianceUpcomingScreen> {
         return;
       }
 
+      SoundService.playBeep();
+
       final submittedStatus = await Navigator.push<String>(
         context,
         MaterialPageRoute(
@@ -565,7 +570,7 @@ class _InspectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final overdue = item.isOverdue;
-
+    
     final accent = overdue
         ? _AppColors.red
         : (item.isDueSoon ? _AppColors.amber : _AppColors.teal);

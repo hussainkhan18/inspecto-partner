@@ -20,6 +20,14 @@ class _GembaWalkScreenState extends State<GembaWalkScreen>
 
   List<Map<String, dynamic>> _assignedGembaData = [];
 
+  List<Map<String, dynamic>> get _assignedOnly => _assignedGembaData
+      .where((w) => w['status']?.toString().toLowerCase() == 'assigned')
+      .toList();
+
+  List<Map<String, dynamic>> get _followUpData => _assignedGembaData
+      .where((w) => w['status']?.toString().toLowerCase() == 'submitted')
+      .toList();
+
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -126,8 +134,11 @@ class _GembaWalkScreenState extends State<GembaWalkScreen>
         foregroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new,
-              color: Colors.white, size: 18),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: Colors.white,
+            size: 18,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         bottom: PreferredSize(
@@ -153,11 +164,11 @@ class _GembaWalkScreenState extends State<GembaWalkScreen>
           ),
         ),
       ),
-      body: TabBarView(
+        body: TabBarView(
         controller: _tabController,
         children: [
-          _buildGembaList(_assignedGembaData, isAssigned: true),
-          _buildFollowUpsTab(),
+          _buildGembaList(_assignedOnly, isAssigned: true),
+          _buildGembaList(_followUpData, isAssigned: false),
         ],
       ),
     );
@@ -165,13 +176,13 @@ class _GembaWalkScreenState extends State<GembaWalkScreen>
 
   Widget _buildGembaList(List<Map<String, dynamic>> data,
       {required bool isAssigned}) {
-    if (isAssigned && _isLoading) {
+    if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(color: _teal),
       );
     }
 
-    if (isAssigned && _errorMessage != null) {
+    if (_errorMessage != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -204,29 +215,41 @@ class _GembaWalkScreenState extends State<GembaWalkScreen>
       );
     }
     if (data.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle_outline_rounded,
-                size: 50, color: _teal.withValues(alpha: 0.6)),
-            const SizedBox(height: 12),
-            const Text(
-              'All Caught Up!',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: _ink,
+      return RefreshIndicator(
+        color: _teal,
+        onRefresh: _loadAssignedWalks,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle_outline_rounded,
+                        size: 50, color: _teal.withValues(alpha: 0.6)),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'All Caught Up!',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: _ink,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isAssigned
+                          ? 'No Gemba walks assigned right now.'
+                          : 'No submitted walks found.',
+                      style: const TextStyle(fontSize: 12.5, color: _muted),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              isAssigned
-                  ? 'No Gemba walks assigned right now.'
-                  : 'No pending follow-ups found.',
-              style: const TextStyle(fontSize: 12.5, color: _muted),
-            ),
-          ],
+          ),
         ),
       );
     }
@@ -235,7 +258,7 @@ class _GembaWalkScreenState extends State<GembaWalkScreen>
 
     return RefreshIndicator(
       color: _teal,
-      onRefresh: isAssigned ? _loadAssignedWalks : () async {},
+      onRefresh: _loadAssignedWalks,
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -243,39 +266,6 @@ class _GembaWalkScreenState extends State<GembaWalkScreen>
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (_, i) =>
             _buildGembaCard(items[i], isAssigned: isAssigned),
-      ),
-    );
-  }
-
-  Widget _buildFollowUpsTab() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.check_circle_outline_rounded,
-              size: 50,
-              color: _teal.withValues(alpha: 0.6),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'No Follow Ups Yet',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: _ink,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Follow-up walks will appear here when assigned to you.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12.5, color: _muted, height: 1.4),
-            ),
-          ],
-        ),
       ),
     );
   }

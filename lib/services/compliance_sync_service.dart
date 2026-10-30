@@ -55,8 +55,9 @@ class ComplianceSyncService {
     }
 
     for (int i = 0; i < validRows.length; i += _batchSize) {
-      final end =
-          (i + _batchSize < validRows.length) ? i + _batchSize : validRows.length;
+      final end = (i + _batchSize < validRows.length)
+          ? i + _batchSize
+          : validRows.length;
       final batch = validRows.sublist(i, end);
 
       final result = await _sendBatch(repo, batch);
@@ -96,16 +97,19 @@ class ComplianceSyncService {
         final map = a as Map<String, dynamic>;
         final responseType = map['response_type']?.toString() ?? 'yes_no';
         final rawValue = map['response']?.toString() ?? '';
+        final value = rawValue.trim().toLowerCase();
 
         dynamic responseValue;
         if (responseType == 'rating_1_5') {
           responseValue = int.tryParse(rawValue) ?? rawValue;
         } else if (responseType == 'text') {
           responseValue = rawValue;
-        } else if (rawValue.toLowerCase() == 'na') {
+        } else if (value == 'na') {
           responseValue = 'na';
+        } else if (responseType == 'pass_fail') {
+          responseValue = (value == 'fail' || value == 'no') ? 'fail' : 'pass';
         } else {
-          responseValue = rawValue.toLowerCase() == 'pass' ? 'yes' : 'no';
+          responseValue = (value == 'yes' || value == 'pass') ? 'yes' : 'no';
         }
 
         return {'id': map['id'], 'response': responseValue};
@@ -160,7 +164,8 @@ class ComplianceSyncService {
       if (response.statusCode < 200 ||
           response.statusCode >= 300 ||
           decoded['success'] != true) {
-        final message = decoded['message']?.toString() ??
+        final message =
+            decoded['message']?.toString() ??
             'Sync failed (HTTP ${response.statusCode})';
         for (final localId in localIds) {
           await repo.markFailed(localId, message);
@@ -181,8 +186,10 @@ class ComplianceSyncService {
           await repo.deleteAfterSync(localIds[i], imagePath: imagePaths[i]);
           synced++;
         } else {
-          await repo.markFailed(localIds[i],
-              matching['message']?.toString() ?? 'Item sync failed');
+          await repo.markFailed(
+            localIds[i],
+            matching['message']?.toString() ?? 'Item sync failed',
+          );
           failed++;
         }
       }
@@ -190,10 +197,16 @@ class ComplianceSyncService {
       return _BatchResult(synced: synced, failed: failed);
     } on SocketException {
       return _BatchResult(
-          synced: 0, failed: failed + localIds.length, networkDown: true);
+        synced: 0,
+        failed: failed + localIds.length,
+        networkDown: true,
+      );
     } on TimeoutException {
       return _BatchResult(
-          synced: 0, failed: failed + localIds.length, networkDown: true);
+        synced: 0,
+        failed: failed + localIds.length,
+        networkDown: true,
+      );
     } catch (_) {
       for (final localId in localIds) {
         await repo.markFailed(localId, 'Unexpected error while syncing');

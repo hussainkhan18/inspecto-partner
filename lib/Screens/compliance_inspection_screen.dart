@@ -99,8 +99,8 @@ class _ComplianceInspectionScreenState
       if (answer == null || answer.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content:
-                  Text('Please answer all checklist items before saving.')),
+            content: Text('Please answer all checklist items before saving.'),
+          ),
         );
         return false;
       }
@@ -117,8 +117,10 @@ class _ComplianceInspectionScreenState
 
     try {
       if (isOffline) {
-        final persistedImage =
-            await OfflineImageStorage.persistImage(_proofImage!, 'compliance');
+        final persistedImage = await OfflineImageStorage.persistImage(
+          _proofImage!,
+          'compliance',
+        );
 
         await ComplianceRepository.instance.saveInspection(
           equipmentQrCode: widget.equipment.equipmentQrCode ?? '',
@@ -151,13 +153,15 @@ class _ComplianceInspectionScreenState
       Navigator.of(context).pop(overallStatus);
     } on ComplianceApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Something went wrong. Please try again.')),
+          content: Text('Something went wrong. Please try again.'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -178,15 +182,19 @@ class _ComplianceInspectionScreenState
             children: [
               SizedBox(
                 height: 130,
-                child: Lottie.asset('assets/animations/success.json',
-                    repeat: false),
+                child: Lottie.asset(
+                  'assets/animations/success.json',
+                  repeat: false,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
                 isCompliant ? 'Marked as Compliant' : 'Marked as Non-Compliant',
                 textAlign: TextAlign.center,
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
@@ -204,7 +212,8 @@ class _ComplianceInspectionScreenState
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   child: const Text('Done'),
                 ),
@@ -232,7 +241,10 @@ class _ComplianceInspectionScreenState
         title: const Text(
           'COMPLIANCE INSPECTION',
           style: TextStyle(
-              fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
         ),
         centerTitle: true,
       ),
@@ -245,34 +257,38 @@ class _ComplianceInspectionScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.06),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: ComplianceImage(
-                          imagePath: eq.imageUrl,
-                          width: double.infinity,
+                    width: double.infinity,
+                    margin: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.06),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: ComplianceImage(
+                        imagePath: eq.imageUrl,
+                        width: double.infinity,
+                        height: MediaQuery.of(context).size.height * 0.22,
+                        fit: BoxFit.contain,
+                        placeholderBuilder: (context) => Container(
                           height: MediaQuery.of(context).size.height * 0.22,
-                          fit: BoxFit.contain,
-                          placeholderBuilder: (context) => Container(
-                            height: MediaQuery.of(context).size.height * 0.22,
-                            color: const Color(0xffF0F0F0),
-                            child: const Icon(Icons.image_not_supported,
-                                color: Colors.grey, size: 48),
+                          color: const Color(0xffF0F0F0),
+                          child: const Icon(
+                            Icons.image_not_supported,
+                            color: Colors.grey,
+                            size: 48,
                           ),
                         ),
-                      )),
+                      ),
+                    ),
+                  ),
 
                   _buildInfoCard(eq),
 
@@ -358,8 +374,9 @@ class _ComplianceInspectionScreenState
           foregroundColor: Colors.white,
           disabledBackgroundColor: color.withOpacity(0.4),
           elevation: 2,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
     );
@@ -385,9 +402,10 @@ class _ComplianceInspectionScreenState
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4)),
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -397,8 +415,10 @@ class _ComplianceInspectionScreenState
           return Column(
             children: [
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -418,7 +438,9 @@ class _ComplianceInspectionScreenState
                       child: Text(
                         value,
                         style: const TextStyle(
-                            fontSize: 14, color: Color(0xff1A1A2E)),
+                          fontSize: 14,
+                          color: Color(0xff1A1A2E),
+                        ),
                       ),
                     ),
                   ],
@@ -440,9 +462,10 @@ class _ComplianceInspectionScreenState
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4)),
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -464,9 +487,10 @@ class _ComplianceInspectionScreenState
                 const Text(
                   'Checklist',
                   style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xff1A1A2E)),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xff1A1A2E),
+                  ),
                 ),
                 const Spacer(),
                 Text(
@@ -481,8 +505,10 @@ class _ComplianceInspectionScreenState
               ? const Padding(
                   padding: EdgeInsets.all(32),
                   child: Center(
-                    child: Text('No checklist items found for this equipment.',
-                        style: TextStyle(color: Colors.grey)),
+                    child: Text(
+                      'No checklist items found for this equipment.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
                   ),
                 )
               : ListView.separated(
@@ -495,7 +521,9 @@ class _ComplianceInspectionScreenState
                     final item = widget.checklist[index];
                     return Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       child: _ChecklistResponseTile(
                         index: index,
                         item: item,
@@ -504,8 +532,9 @@ class _ComplianceInspectionScreenState
                             setState(() => _answers[item.id] = value),
                         textController: item.responseType == 'text'
                             ? (_textControllers[item.id] ??=
-                                TextEditingController(
-                                    text: _answers[item.id] ?? ''))
+                                  TextEditingController(
+                                    text: _answers[item.id] ?? '',
+                                  ))
                             : null,
                         onTextChanged: (value) {
                           if (value.trim().isEmpty) {
@@ -534,9 +563,10 @@ class _ComplianceInspectionScreenState
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4)),
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -548,14 +578,19 @@ class _ComplianceInspectionScreenState
                 width: 4,
                 height: 22,
                 decoration: BoxDecoration(
-                    color: _teal, borderRadius: BorderRadius.circular(4)),
+                  color: _teal,
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
               const SizedBox(width: 10),
-              const Text('Proof Image',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xff1A1A2E))),
+              const Text(
+                'Proof Image',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xff1A1A2E),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -578,15 +613,16 @@ class _ComplianceInspectionScreenState
                 _isPickingImage
                     ? 'Processing image...'
                     : (_proofImage == null
-                        ? 'Upload Equipment Image'
-                        : 'Retake Photo'),
+                          ? 'Upload Equipment Image'
+                          : 'Retake Photo'),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _teal,
                 foregroundColor: Colors.white,
                 disabledBackgroundColor: _teal.withOpacity(0.6),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
           ),
@@ -616,9 +652,10 @@ class _ComplianceInspectionScreenState
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4)),
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -630,14 +667,19 @@ class _ComplianceInspectionScreenState
                 width: 4,
                 height: 22,
                 decoration: BoxDecoration(
-                    color: _teal, borderRadius: BorderRadius.circular(4)),
+                  color: _teal,
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
               const SizedBox(width: 10),
-              const Text('Remarks',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xff1A1A2E))),
+              const Text(
+                'Remarks',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xff1A1A2E),
+                ),
+              ),
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -645,8 +687,10 @@ class _ComplianceInspectionScreenState
                   color: const Color(0xffF0F0F0),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text('Optional',
-                    style: TextStyle(fontSize: 11, color: Color(0xff888888))),
+                child: const Text(
+                  'Optional',
+                  style: TextStyle(fontSize: 11, color: Color(0xff888888)),
+                ),
               ),
             ],
           ),
@@ -657,12 +701,16 @@ class _ComplianceInspectionScreenState
             minLines: 2,
             decoration: InputDecoration(
               hintText: 'Add remarks, especially for non-compliance...',
-              hintStyle:
-                  const TextStyle(color: Color(0xffAAAAAA), fontSize: 13),
+              hintStyle: const TextStyle(
+                color: Color(0xffAAAAAA),
+                fontSize: 13,
+              ),
               filled: true,
               fillColor: const Color(0xffF5F6FA),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: const BorderSide(color: Color(0xffDDE1E7)),
@@ -711,17 +759,23 @@ class _ChecklistResponseTile extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${index + 1}.',
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w700, color: _accent)),
+            Text(
+              '${index + 1}.',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: _accent,
+              ),
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 item.question,
                 style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xff1A1A2E)),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xff1A1A2E),
+                ),
               ),
             ),
             if (item.isCritical)
@@ -732,11 +786,14 @@ class _ChecklistResponseTile extends StatelessWidget {
                   color: const Color(0xff64748B).withOpacity(0.10),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Text('CRITICAL',
-                    style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xff64748B))),
+                child: const Text(
+                  'CRITICAL',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xff64748B),
+                  ),
+                ),
               ),
           ],
         ),
@@ -761,8 +818,10 @@ class _ChecklistResponseTile extends StatelessWidget {
             filled: true,
             fillColor: const Color(0xffF5F6FA),
             isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: Color(0xffDDE1E7)),
@@ -782,11 +841,11 @@ class _ChecklistResponseTile extends StatelessWidget {
         return _optionRow(const [
           {'label': 'Pass', 'value': 'pass', 'icon': Icons.check_rounded},
           {'label': 'Fail', 'value': 'fail', 'icon': Icons.close_rounded},
-          {
-            'label': 'N/A',
-            'value': 'na',
-            'icon': Icons.remove_circle_outline_rounded
-          },
+          // {
+          //   'label': 'N/A',
+          //   'value': 'na',
+          //   'icon': Icons.remove_circle_outline_rounded
+          // },
         ]);
 
       case 'rating_1_5':
@@ -795,12 +854,12 @@ class _ChecklistResponseTile extends StatelessWidget {
       case 'yes_no':
       default:
         return _optionRow(const [
-          {'label': 'Yes', 'value': 'pass', 'icon': Icons.check_rounded},
-          {'label': 'No', 'value': 'fail', 'icon': Icons.close_rounded},
+          {'label': 'Yes', 'value': 'yes', 'icon': Icons.check_rounded},
+          {'label': 'No', 'value': 'no', 'icon': Icons.close_rounded},
           {
             'label': 'N/A',
             'value': 'na',
-            'icon': Icons.remove_circle_outline_rounded
+            'icon': Icons.remove_circle_outline_rounded,
           },
         ]);
     }
@@ -875,8 +934,9 @@ class _ChecklistResponseTile extends StatelessWidget {
                     opt['label'] as String,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight:
-                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w500,
                       color: isSelected ? _accent : _idle,
                     ),
                   ),

@@ -115,12 +115,16 @@ class GembaWalkProvider with ChangeNotifier {
   bool get isLocked => _isSubmitted || _isSubmitting;
 
   int get completedCount {
+    if (_isSubmitted) return _questions.length;
     int count = 0;
     for (var q in _questions) {
       final id = q['id'] as int;
       final status = _complianceStatus[id];
       final images = _questionImages[id] ?? [];
-      if (status != null && status != 'pending' && images.isNotEmpty) {
+      final urls = _questionImageUrls[id] ?? [];
+      if (status != null &&
+          status != 'pending' &&
+          (images.isNotEmpty || urls.isNotEmpty)) {
         count++;
       }
     }

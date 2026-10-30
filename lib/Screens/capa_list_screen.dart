@@ -19,7 +19,7 @@ class _CapaListScreenState extends State<CapaListScreen> {
 
   final GembaWalkService _service = GembaWalkService();
 
-  List<CapaModel> _capas = [];
+     List<CapaModel> _capas = [];
   bool _isLoading = true;
   String? _errorMessage;
   int? _justUpdatedCapaId;
@@ -218,6 +218,13 @@ class _CapaListScreenState extends State<CapaListScreen> {
     );
   }
 
+  bool _isNew(CapaModel capa) {
+    if (capa.isCompleted) return false;
+    final created = DateTime.tryParse(capa.createdAt);
+    if (created == null) return false;
+    return DateTime.now().difference(created).inHours < 24;
+  }
+
   Widget _buildCapaCard(CapaModel capa) {
     final accent = _statusColor(capa.status);
     final dueText = capa.dueDate == null || capa.dueDate!.isEmpty
@@ -263,7 +270,38 @@ class _CapaListScreenState extends State<CapaListScreen> {
                             ),
                           ),
                         ),
-                        _statusChip(capa.statusLabel, capa.status),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_isNew(capa)) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _teal.withOpacity(0.12),
+                                  border: Border.all(
+                                    color: _teal.withOpacity(0.4),
+                                    width: 1.0,
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Text(
+                                  'NEW',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: _teal,
+                                    letterSpacing: 0.4,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            _statusChip(capa.statusLabel, capa.status),
+                          ],
+                        ),
                       ],
                     ),
                     const SizedBox(height: 10),
